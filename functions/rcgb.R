@@ -1,6 +1,4 @@
-# sample from complex generalized Bingham distribution
-
-# sampling from complex matrix-variate generalized Bingham Langevin dist.
+# sample from complex matrix Bingham distribution
 # as in Abdallah et al. 2020
 
 library(rstiefel)
