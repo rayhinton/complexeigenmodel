@@ -1,6 +1,6 @@
 # test rcgb, sampling from the Complex matrix generalized Bingham distribution
 
-source("~/Documents/PhD_research/RA_time-series/code-experiments/complex-eigenmodel/functions/rcgb.R")
+source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/functions/rcgb.R")
 
 # parameters
 # random matrix U is NxP
@@ -103,7 +103,7 @@ testthat::expect_equal(Im(t(Conj(Uc[, -p_test])) %*% up_LN),
                        matrix(0, nrow = P-1, ncol = 1))
 
 # test: new vector should have unit norm
-testthat::expect_equal(t(Conj(up_LN)) %*% up_LN, 
+testthat::expect_equal((t(Conj(up_LN)) %*% up_LN)[1, 1], 
                        (1 + 0i))
 
 # test: new vector should have correct dimension
@@ -112,32 +112,24 @@ testthat::expect_equal(t(Conj(up_LN)) %*% up_LN,
 testthat::expect_equal(dim(up_LN), 
                        c(nrow(Uc), 1))
 
-# over the columns of U, in a random order:
-ps <- sample(1:P)
-for (p in ps) {
-    
-    LN <- NullC(U[, -p])
-    # this value is actually not used later
-    u <- Conj(t(LN)) %*% U[, -p]
-    
-    # cbar <- Conj(t(LN)) %*% C[, p] 
-    Abar <- Conj(t(LN)) %*% AP[, , p] %*% LN
-    
-    u <- rcvb(Abar)
-    
-    # replace U[, p] with:
-    U[, p] <- LN %*% u
-}
+# test full matrix sampling -----------------------------------------------
 
-# if p is 3, then any column of LN should be orthogonal to columns 1, 2 of U
-# output of 
-t(Conj(LN)) %*% U[, 1]
-p
+# store the old dimension, to compare to dimensions of newly sampled matrix
+old_dim <- dim(Uc)
 
-dim(U)
+# draw a sample from complex matrix Bingham distribution
+Uc <- rcmb(Uc, Ac, Bc)
 
-# check orthonormal columns
+# expect an error when using a square U matrix
+testthat::expect_error(rcmb(diag(N), diag(N), diag(P)),
+                       regexp = "nrow(U) must be greater than ncol(U)",
+                       fixed = TRUE)
+
+# the dimensions of the newly sampled matrix should be the same as the old matrix
+testthat::expect_equal(old_dim, dim(Uc))
+
+# columns of the new matrix should be orthonormal
 # - real part of matrix should be I_p identity matrix
 # - imaginary part of matrix should be zeros
-testthat::expect_equal(Re(t(Conj(U)) %*% U), diag(P))
-testthat::expect_equal(Im(t(Conj(U)) %*% U), matrix(0, P, P))
+testthat::expect_equal(Re(t(Conj(Uc)) %*% Uc), diag(P))
+testthat::expect_equal(Im(t(Conj(Uc)) %*% Uc), matrix(0, P, P))

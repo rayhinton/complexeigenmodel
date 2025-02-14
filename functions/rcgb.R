@@ -11,7 +11,7 @@ fr <- function(b, betas) {
     return(abs(sum(1 / (b + 2*betas)) - 1))
 }
 
-# rvB - sample from the real vector Bingham distribution -----------------
+# rvB - sample from the real vector Bingham distribution ------------------
 
 # input:
 # A, NxN symmetric matrix parameter
@@ -66,18 +66,9 @@ rvB <- function(A, opt_upper = 1e5) {
 
 # rcvb - using the vBL, sample from complex VGBL --------------------------
 
-# AA <- rbind(cbind(Re(A), -Im(A)),
-#             cbind(Im(A), Re(A)))
-# cc <- matrix(c(Re(c), Im(c)), ncol = 1)
-# 
-# uu <- rvBL(cc, AA) |> matrix(ncol = 2)
-# complex(real = uu[, 1], imaginary = uu[, 2])
-
 rcvb <- function(A, opt_upper = 1e5) {
     AA <- rbind(cbind(Re(A), -Im(A)),
                 cbind(Im(A), Re(A)))
-    print(dim(AA))
-    # cc <- matrix(c(Re(c), Im(c)), ncol = 1)
     
     uu <- rvB(AA, opt_upper = opt_upper) |> matrix(ncol = 2)
     
@@ -116,10 +107,32 @@ rcvb_LN <- function(U, p, A, B) {
     # this value is actually not used later
     u <- Conj(t(LN)) %*% U[, -p]
     
-    # cbar <- Conj(t(LN)) %*% C[, p] 
-    # Abar <- Conj(t(LN)) %*% AP[, , p] %*% LN
     Abar <- Conj(t(LN)) %*% (B[p] * A) %*% LN
     
     u <- LN %*% rcvb(Abar)
     return(u)
+}
+
+# rcmb - sample from the random complex matrix Bingham distribution -------
+# Input:
+
+# - U, an NxP complex-valued matrix with orthonormal columns
+# - A, NxN psd Hermitian matrix
+# - B, PxP diagonal matrix, or a Px1 vector representing the diagonal entries of B
+
+# Output:
+
+# - U, an NxP complex-valued matrix with orthonormal columns, sampled from the
+# complex matrix Bingham distribution
+
+rcmb <- function(U, A, B) {
+    if (nrow(U) <= ncol(U)) stop("nrow(U) must be greater than ncol(U)")
+    
+    # over the columns of U, in a random order:
+    ps <- sample(1:ncol(U))
+    for (p in ps) {
+        U[, p] <- rcvb_LN(U, p, A, B)
+    }
+    
+    return(U)
 }
