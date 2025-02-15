@@ -5,8 +5,18 @@ library(rstiefel)
 library(cmvnorm)
 library(mvtnorm)
 
-fr <- function(b, betas) {
-    return(abs(sum(1 / (b + 2*betas)) - 1))
+# fr <- function(b, betas) {
+#     return(abs(sum(1 / (b + 2*betas)) - 1))
+# }
+
+# from Kent et al. 2016 supplementary materials
+bfind <- function(lambda) {
+    q <- length(lambda)
+    fb <- function(b) 1 - sum(1/(b + 2*lambda))
+    if (sum(lambda^2) == 0) b0 <- q
+    else b0 <- uniroot(fb, interval = c(1, q))$root
+    
+    return(b0)
 }
 
 # rvB - sample from the real vector Bingham distribution ------------------
@@ -32,8 +42,9 @@ rvB <- function(A, opt_upper = 1e5) {
     # TODO can I solve this in another way?
     # TODO I should perform some sort of check that determines where I need to use a larger "upper" value
     # Line 2: solve for b
-    b <- optim(0.1, fr, method = "Brent", lower = 0, upper = opt_upper, 
-               betas = betas)$par
+    # b <- optim(0.1, fr, method = "Brent", lower = 0, upper = opt_upper, 
+    #            betas = betas)$par
+    b <- bfind(betas)
     
     # Line 4: compute Omega
     Om <- diag(N) + (2/b) * mat2
