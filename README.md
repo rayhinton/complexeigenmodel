@@ -1,4 +1,4 @@
-# complexeigenmodel - Bayesian hierarchical modeling of eigendecompositions of complex-valued data
+# complexeigenmodel - Estimating eigendecompositions of parameters for complex-valued data through Bayesian hierarchical modeling
 
 In collaboration with Dr. Scott Bruce, Dr. Jamshid Namdari, and Dr. Brani Vidakovic.
 
