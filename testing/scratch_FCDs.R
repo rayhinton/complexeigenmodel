@@ -20,7 +20,6 @@ P <- 6
 # reduced dimension of interest
 d <- 2
 
-
 # generate true underlying covariance matrices ----------------------------
 # Sigma_k = sigma_k^2 * (U_k * Lambda_k * U_k^H + I_P)
 # need to generate sigma_k, U_k, Lambda_k
@@ -98,7 +97,71 @@ for (k in 1:K) {
         (diag(nk[k]) - matrix(1/nk[k], nk[k], nk[k])) %*% Y_k[[k]]
 }
 
-# sigma_k^2 ---------------------------------------------------------------
+
+# sampling initialization -------------------------------------------------
+# number of MCMC iteratons
+S <- 10
+
+# initialize arrays to store values
+V_s <- array(NA, c(P, P, S))
+V_s[, , 1] <- runitary(P, P)
+
+##### A and B matrices
+# need to sample in terms of alpha, beta vectors
+# and w scalar
+alpha_s <- matrix(NA, S, P)
+beta_s <- matrix(NA, S, d)
+w_s <- vector("numeric", S)
+
+alpha_s[1, ] <- c(1, runif(P-2) |> sort(decreasing = TRUE), 0)
+beta_s[1, ] <- c(1, runif(d-2) |> sort(decreasing = TRUE), 0)
+
+# prior for w scalar 
+# - I believe Hoff is recommending these parameters in terms of the shape and SCALE for the Gamma distribution. Otherwise, a large tau parameter does not seem to lead to a diffuse prior. 
+# - Also, comparing some of his FCDs that are Inverse Gamma distributions, he seems to have the parameters directly multiplying the inverse of the r.v. value
+eta_0 <- 2
+tau2_0 <- 100
+
+w_s[1] <- rgamma(1, eta_0/2, scale = tau2_0)
+
+##### U_k matrices
+# initialize an array to store the U_k over iterations
+U_k_s <- array(NA, c(P, d, K, S))
+
+# calculate temporary A and B matrices, and transformation of A for Bingham
+A_s <- diag(sqrt(w_s[1]) * alpha_s[1, ])
+A_gb <- V_s[, , 1] %*% A_s %*% t(Conj(V_s[, , 1]))
+B_s <- diag(sqrt(w_s[1]) * beta_s[1, ])
+for (k in 1:K) {
+    U_k_s[, , k, 1] <- rcmb(runitary(P, d), A_gb, B_s)
+}
+
+##### Lambda_k matrices
+# initialize an array to store Lambda_k diagonals
+Lambda_k_s <- array(NA, c(d, K, S))
+
+for (k in 1:K) {
+    omega_k <- runif(d)
+    Lambda_k_s[, k, 1] <- omega_k / (1 - omega_k)
+}
+
+##### sigma_k2 covariance matrix scales
+sigma_k2_s <- matrix(NA, K, S)
+
+sigma_k2_s[, 1] <- 1/rgamma(K, 1, 1)
+
+# temporary sampling fill-in ----------------------------------------------
+
+# TODO remove s, the explicit MCMC iteration value
+s <- 2
+
+# TODO remove these parameter fill-in values
+# fill in the U_k and Lambda_k values, for now
+U_k_s[, , 1:K, s] <- U_k_s[, , 1:K, 1]
+Lambda_k_s[, 1:K, s] <- Lambda_k_s[, 1:K, 1]
+
+
+# sigma_k2 sampling -------------------------------------------------------
 
 # sigma_k^2: an Inverse Gamma distribution
 
@@ -106,7 +169,22 @@ for (k in 1:K) {
 # also depends on the complex Wishart degrees of freedom
 # and the dimension the observation vectors, i.e. Px1
 
-# TODO need to generate data, and the corresponding sum of squares matrix, P_k
+IP <- diag(P)
 
-# data should be a list, since it could be different dimensions (numbers of rows), using an array would not be appropriate
+for (k in 1:K) {
+    # set up temp matrices based on previously sampled values
+    Uk <- U_k_s[, , k, s]
+    Lambdak <- diag(Lambda_k_s[, k, s])
+    
+    # calculate parameters for the Inverse Gamma distribution
+    ak <- P * (nk[k] - 1)
+    bk <- Re(sum(diag(
+        solve(Uk %*% Lambdak %*% t(Conj(Uk)) + IP) %*% P_k[, , k]
+    )))
+    
+    # FCD is Inverse Gamma: 1 / Gamma, in terms of the rate parameter
+    sigma_k2_s[k, s] <- 1/rgamma(1, ak, rate = bk)
+}
+
+# V matrix sampling -------------------------------------------------------
 
