@@ -90,7 +90,7 @@ Uc <- rustiefel(N, P)
 # p <- 1
 
 p_test <- 1
-up_LN <- rcvb_LN(Uc, p_test, Ac, Bc)
+up_LN <- rcvb_LN(Uc, p_test, Bc[p_test]*Ac)
 
 # test: the sampled u_p should be orthogonal to the other columns in U
 # meaning: the dot product of the columns of U[, -p] with u_p should be a 0 vector.

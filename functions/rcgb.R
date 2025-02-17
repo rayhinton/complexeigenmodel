@@ -105,18 +105,13 @@ rcvb <- function(A, opt_upper = 1e5) {
 # sampled, and then this result is transformed back to the originality
 # dimensionality, using a basis of the left null space of U[, -p], ensuring u_p
 # is orthogonal to the rest of the columns in U.
-rcvb_LN <- function(U, p, A, B) {
+rcvb_LN <- function(U, j, A) {
     
-    # if B is provided as a matrix, instead, use the diagonal of B
-    if (is.matrix(B)) {
-        B <- diag(B)
-    }
-    
-    LN <- NullC(U[, -p])
+    LN <- NullC(U[, -j])
     # this value is actually not used later
-    u <- Conj(t(LN)) %*% U[, -p]
+    u <- Conj(t(LN)) %*% U[, -j]
     
-    Abar <- Conj(t(LN)) %*% (B[p] * A) %*% LN
+    Abar <- Conj(t(LN)) %*% A %*% LN
     
     u <- LN %*% rcvb(Abar)
     return(u)
@@ -137,10 +132,14 @@ rcvb_LN <- function(U, p, A, B) {
 rcmb <- function(U, A, B) {
     if (nrow(U) <= ncol(U)) stop("nrow(U) must be greater than ncol(U)")
     
+    if (is.matrix(B)) {
+        B <- diag(B)
+    }
+    
     # over the columns of U, in a random order:
-    ps <- sample(1:ncol(U))
-    for (p in ps) {
-        U[, p] <- rcvb_LN(U, p, A, B)
+    js <- sample(1:ncol(U))
+    for (j in js) {
+        U[, j] <- rcvb_LN(U, j, B[j]*A)
     }
     
     return(U)

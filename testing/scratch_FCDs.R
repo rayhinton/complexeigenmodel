@@ -109,12 +109,12 @@ V_s[, , 1] <- runitary(P, P)
 ##### A and B matrices
 # need to sample in terms of alpha, beta vectors
 # and w scalar
-alpha_s <- matrix(NA, S, P)
-beta_s <- matrix(NA, S, d)
+alpha_s <- matrix(NA, P, S)
+beta_s <- matrix(NA, d, S)
 w_s <- vector("numeric", S)
 
-alpha_s[1, ] <- c(1, runif(P-2) |> sort(decreasing = TRUE), 0)
-beta_s[1, ] <- c(1, runif(d-2) |> sort(decreasing = TRUE), 0)
+alpha_s[, 1] <- c(1, runif(P-2) |> sort(decreasing = TRUE), 0)
+beta_s[, 1] <- c(1, runif(d-2) |> sort(decreasing = TRUE), 0)
 
 # prior for w scalar 
 # - I believe Hoff is recommending these parameters in terms of the shape and SCALE for the Gamma distribution. Otherwise, a large tau parameter does not seem to lead to a diffuse prior. 
@@ -129,9 +129,9 @@ w_s[1] <- rgamma(1, eta_0/2, scale = tau2_0)
 U_k_s <- array(NA, c(P, d, K, S))
 
 # calculate temporary A and B matrices, and transformation of A for Bingham
-A_s <- diag(sqrt(w_s[1]) * alpha_s[1, ])
+A_s <- diag(sqrt(w_s[1]) * alpha_s[, 1])
 A_gb <- V_s[, , 1] %*% A_s %*% t(Conj(V_s[, , 1]))
-B_s <- diag(sqrt(w_s[1]) * beta_s[1, ])
+B_s <- diag(sqrt(w_s[1]) * beta_s[, 1])
 for (k in 1:K) {
     U_k_s[, , k, 1] <- rcmb(runitary(P, d), A_gb, B_s)
 }
@@ -159,6 +159,8 @@ s <- 2
 # fill in the U_k and Lambda_k values, for now
 U_k_s[, , 1:K, s] <- U_k_s[, , 1:K, 1]
 Lambda_k_s[, 1:K, s] <- Lambda_k_s[, 1:K, 1]
+w_s[s] <- w_s[1]
+beta_s[s, ] <- beta_s[, 1]
 
 
 # sigma_k2 sampling -------------------------------------------------------
@@ -187,4 +189,17 @@ for (k in 1:K) {
 }
 
 # V matrix sampling -------------------------------------------------------
+# FCD is a complex matrix Bingham distribution
+# depending on U_k, B, and A
 
+B_s <- diag(sqrt(w_s[s]) * beta_s[s, ])
+
+# TODO could possibly do faster with sort of `apply`
+sumMat <- matrix(0 + 0i, P, P)
+for (k in 1:K) {
+    # TODO since B_s is a diagonal matrix, could I do this multiplication more
+    # quickly using recycling?
+    sumMat <- sumMat + U_k_s[, , k, s] %*% B_s %*% t(Conj(U_k_s[, , k, s]))
+}
+
+V_s[, , s] <- rcmb(V_s[, , s-1], sumMat, B_s)
