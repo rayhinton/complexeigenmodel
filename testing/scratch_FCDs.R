@@ -192,7 +192,11 @@ for (k in 1:K) {
 # FCD is a complex matrix Bingham distribution
 # depending on U_k, B, and A
 
-B_s <- diag(sqrt(w_s[s]) * beta_s[s, ])
+# set up temporary vectors and matrices for a, A, b, B, for convenience
+a_s <- sqrt(w_s[s]) * alpha_s[s, ]
+A_s <- diag(a_s)
+b_s <- sqrt(w_s[s]) * beta_s[s, ]
+B_s <- diag(b_s)
 
 # TODO could possibly do faster with sort of `apply`
 sumMat <- matrix(0 + 0i, P, P)
@@ -202,4 +206,22 @@ for (k in 1:K) {
     sumMat <- sumMat + U_k_s[, , k, s] %*% B_s %*% t(Conj(U_k_s[, , k, s]))
 }
 
+# TODO need to make sure rcmb can sample **square matrices**
 V_s[, , s] <- rcmb(V_s[, , s-1], sumMat, B_s)
+
+# U_k, eigenvector matrices -----------------------------------------------
+
+# there will be two loops:
+# - over all the K U_k matrices
+# - over the columns in a U_k matrix
+
+# set k to 1, to just start with sampling one matrix
+k <- 1
+# number of columns in U_k is d
+for (j in 1:d) {
+    # b_j is the jth diagonal entry of matrix B
+    b_j <- b_s[j]
+    omega_j <- Lambda_k_s[j, k, s] / (Lambda_k_s[j, k, s] + 1)
+    
+    
+}
