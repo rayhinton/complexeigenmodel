@@ -133,3 +133,4 @@ testthat::expect_equal(old_dim, dim(Uc))
 # - imaginary part of matrix should be zeros
 testthat::expect_equal(Re(t(Conj(Uc)) %*% Uc), diag(P))
 testthat::expect_equal(Im(t(Conj(Uc)) %*% Uc), matrix(0, P, P))
+

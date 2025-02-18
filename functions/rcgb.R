@@ -49,7 +49,8 @@ rvB <- function(A, opt_upper = 1e5) {
     # Line 4: compute Omega
     Om <- diag(N) + (2/b) * mat2
     # Line 3: compute Mstar, as a function of b
-    Mst <- exp(.5 + gamm) * exp(-(N - b)/2) * (N/b)^(N/2) * det(Om)^-.5
+    log_Mst <- .5 + gamm - (N - b)/2 +
+        log((N/b)^(N/2)) + log(det(Om)^-.5)
     
     # Line 5: sample u by acceptance-rejection scheme    
     acc_prob <- 0
@@ -60,13 +61,13 @@ rvB <- function(A, opt_upper = 1e5) {
         # Line 7: normalize y
         u <- t(y) / sqrt(sum(y^2))
         # Line 8: compute the ACG density value at u
-        f_ACG <- det(Om)^.5 * (t(u) %*% Om %*% u)^(-N/2)
+        log_f_ACG <- log(det(Om)^.5 * (t(u) %*% Om %*% u)^(-N/2))
         # Line 9: compute the vector Bingham density value at u
-        f_vBL <- exp(t(u) %*% A %*% u)
+        log_f_vBL <- t(u) %*% A %*% u
         
         # Lines 10-11: accept u with the calculated probability
         u_draw <- runif(1)
-        acc_prob <- f_vBL / (Mst * f_ACG)
+        acc_prob <- exp(log_f_vBL - log_Mst - log_f_ACG)
     }
     
     # Line 12: return u, after the acceptance criteria is met

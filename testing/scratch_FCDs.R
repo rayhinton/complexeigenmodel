@@ -160,8 +160,9 @@ s <- 2
 U_k_s[, , 1:K, s] <- U_k_s[, , 1:K, 1]
 Lambda_k_s[, 1:K, s] <- Lambda_k_s[, 1:K, 1]
 w_s[s] <- w_s[1]
-beta_s[s, ] <- beta_s[, 1]
-
+beta_s[, s] <- beta_s[, 1]
+alpha_s[, s] <- alpha_s[, 1]
+V_s[, , s] <- V_s[, , 1]
 
 # sigma_k2 sampling -------------------------------------------------------
 
@@ -175,6 +176,7 @@ IP <- diag(P)
 
 for (k in 1:K) {
     # set up temp matrices based on previously sampled values
+    # TODO what order am I sampling, within an iteration? possibly change s to s-1
     Uk <- U_k_s[, , k, s]
     Lambdak <- diag(Lambda_k_s[, k, s])
     
@@ -193,9 +195,9 @@ for (k in 1:K) {
 # depending on U_k, B, and A
 
 # set up temporary vectors and matrices for a, A, b, B, for convenience
-a_s <- sqrt(w_s[s]) * alpha_s[s, ]
+a_s <- sqrt(w_s[s]) * alpha_s[, s]
 A_s <- diag(a_s)
-b_s <- sqrt(w_s[s]) * beta_s[s, ]
+b_s <- sqrt(w_s[s]) * beta_s[, s]
 B_s <- diag(b_s)
 
 # TODO could possibly do faster with sort of `apply`
@@ -216,12 +218,18 @@ V_s[, , s] <- rcmb(V_s[, , s-1], sumMat, B_s)
 # - over the columns in a U_k matrix
 
 # set k to 1, to just start with sampling one matrix
-k <- 1
-# number of columns in U_k is d
-for (j in 1:d) {
-    # b_j is the jth diagonal entry of matrix B
-    b_j <- b_s[j]
-    omega_j <- Lambda_k_s[j, k, s] / (Lambda_k_s[j, k, s] + 1)
-    
-    
+for (k in 1:K) {
+    # make a temporary matrix to sample; starting with the previous sample s-1
+    Uk <- U_k_s[, , k, s-1]
+    # number of columns in U_k is d
+    for (j in sample(1:d)) {
+        # b_j is the jth diagonal entry of matrix B
+        b_j <- b_s[j]
+        omega_j <- Lambda_k_s[j, k, s] / (Lambda_k_s[j, k, s] + 1)
+        tempmat <- V_s[, , s] %*% A_s %*% t(Conj(V_s[, , s]))
+
+        Uk[, j] <- rcvb_LN(Uk, j, b_j * tempmat + omega_j * P_k[, , k])
+    }
+    # put the newly sampled matrix into the larger array at index s
+    U_k_s[, , k, s] <- Uk
 }
