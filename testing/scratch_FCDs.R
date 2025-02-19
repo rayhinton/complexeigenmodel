@@ -7,6 +7,9 @@ source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmod
 
 # generate testing data ---------------------------------------------------
 
+# we must generate "true" parameters, and then data that has a distribution
+# based on these parameters
+
 # number of groups
 K <- 3
 
@@ -20,85 +23,15 @@ P <- 6
 # reduced dimension of interest
 d <- 2
 
-# generate true underlying covariance matrices ----------------------------
-# Sigma_k = sigma_k^2 * (U_k * Lambda_k * U_k^H + I_P)
-# need to generate sigma_k, U_k, Lambda_k
+# number of iterations for sampling from matrix Bingham distribution
+bing_its <- 1000
 
-##### generate sigma_k
+# generate parameters and data (Y_k, P_k) using this script
 set.seed(15022025)
-sigma_k2_0 <- 1/rgamma(K, 1, 1)
-
-##### V matrix, PxP
-V_0 <- runitary(P, P)
-
-##### A and B matrices
-# need to sample in terms of alpha, beta vectors
-# and w scalar
-alpha_0 <- c(1, runif(P-2) |> sort(decreasing = TRUE), 0)
-beta_0 <- c(1, runif(d-2) |> sort(decreasing = TRUE), 0)
-
-# prior for w scalar 
-# - I believe Hoff is recommending these parameters in terms of the shape and SCALE for the Gamma distribution. Otherwise, a large tau parameter does not seem to lead to a diffuse prior. 
-# - Also, comparing some of his FCDs that are Inverse Gamma distributions, he seems to have the parameters directly multiplying the inverse of the r.v. value
-eta_0 <- 2
-tau2_0 <- 100
-
-w_0 <- rgamma(1, eta_0/2, scale = tau2_0)
-
-A_0 <- diag(sqrt(w_0) * alpha_0)
-B_0 <- diag(sqrt(w_0) * beta_0)
-
-##### generate U_k
-# generating U_k, Lambda_k - these are just the eigenvectors, eigenvalues of some complex symmetric matrix
-# these are the eigenvectors of part of the covariance matrix
-U_k_0 <- array(NA, c(P, d, K))
-# generate the U_k matrices from the prior, complex gen. Bingham (A, B, V)
-A_0_gb <- V_0 %*% A_0 %*% t(Conj(V_0))
-for (k in 1:K) {
-    U_k_0[, , k] <- runitary(P, d)
-    for (i in 1:1000) {
-        U_k_0[, , k] <- rcmb(U_k_0[, , k], A_0_gb, B_0)
-    }
-}
-
-###### generate Lambda_k matrices
-Lambda_k_0 <- array(NA, c(d, d, K))
-for (k in 1:K) {
-    omega_k <- runif(d)
-    lambda_k <- omega_k / (1 - omega_k)
-    Lambda_k_0[, , k] <- diag(lambda_k)
-}
-
-# Sigma_k covariance matrices, in terms of the previous parameters
-Sigma_k_0 <- array(NA, c(P, P, K))
-for (k in 1:K) {
-    Sigma_k_0[, , k] <- sigma_k2_0[k] * 
-        (U_k_0[, , k] %*% Lambda_k_0[, , k] %*% t(Conj(U_k_0[, , k])) + 
-             diag(P))
-}
-
-# generate data, Y_k and P_k ----------------------------------------------
-
-# generate true mean vectors, mu_k
-mu_k_0 <- rcmvnorm(K, rep(0, P))
-
-###### Y_k, List of observed data matrices
-Y_k <- list()
-
-for (k in 1:K) {
-    Y_k[[k]] <- rcmvnorm(nk[k], mu_k_0[k, ], Sigma_k_0[, , k])
-}
-
-###### P_k, sums of squares matrices
-P_k <- array(NA, c(P, P, K))
-
-for (k in 1:K) {
-    P_k[, , k] <- t(Conj(Y_k[[k]])) %*% 
-        (diag(nk[k]) - matrix(1/nk[k], nk[k], nk[k])) %*% Y_k[[k]]
-}
-
+source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/testing/scratch_data-covar-dense.R")
 
 # sampling initialization -------------------------------------------------
+
 # number of MCMC iteratons
 S <- 10
 
@@ -217,17 +150,23 @@ V_s[, , s] <- rcmb(V_s[, , s-1], sumMat, B_s)
 # - over all the K U_k matrices
 # - over the columns in a U_k matrix
 
+# this is a matrix quantity which is the same for all groups and columns
+tempmat <- V_s[, , s] %*% A_s %*% t(Conj(V_s[, , s]))
 # set k to 1, to just start with sampling one matrix
 for (k in 1:K) {
     # make a temporary matrix to sample; starting with the previous sample s-1
     Uk <- U_k_s[, , k, s-1]
     # number of columns in U_k is d
     for (j in sample(1:d)) {
+        # extract and calculate some temporary values
         # b_j is the jth diagonal entry of matrix B
         b_j <- b_s[j]
+        # TODO possibly change to the (s-1) iteration of Lambda_k_s. If I sample
+        # Lambda before this, then it should be s. If I sample Lambda after,
+        # then the most recent iteration is s-1.
         omega_j <- Lambda_k_s[j, k, s] / (Lambda_k_s[j, k, s] + 1)
-        tempmat <- V_s[, , s] %*% A_s %*% t(Conj(V_s[, , s]))
 
+        # sample column j as a Bingham vector, orthogonal to other columns in Uk
         Uk[, j] <- rcvb_LN(Uk, j, b_j * tempmat + omega_j * P_k[, , k])
     }
     # put the newly sampled matrix into the larger array at index s
