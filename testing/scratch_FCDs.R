@@ -27,7 +27,7 @@ d <- 2
 bing_its <- 1000
 
 # generate parameters and data (Y_k, P_k) using this script
-set.seed(15022025)
+simdataseed <- set.seed(15022025)
 source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/testing/scratch_data-covar-dense.R")
 
 # sampling initialization -------------------------------------------------
@@ -171,4 +171,38 @@ for (k in 1:K) {
     }
     # put the newly sampled matrix into the larger array at index s
     U_k_s[, , k, s] <- Uk
+}
+
+# Lambda_k, eigenvector matrices ------------------------------------------
+
+# If each omega_jk has a Uniform prior distribution, then the FCD of 1 - omega
+# is a Gamma distribution, truncated to (0, 1).
+
+for (k in 1:K) {
+    for (j in 1:d) {
+        # xi_jk Gamma(nk, tjk), shape, rate, 
+        # and tjk is a temporary parameter defined as:
+        # (note we take the Real part, since the quadratic form should be real, 
+        # but may have a small complex part due to numerical issues.)
+        # TODO change s, possibly: If I sample U_k before, then s. Otherwise, s-1. 
+        tjk <- Re(
+            t(Conj(U_k_s[, j, k, s])) %*% P_k[, , k] %*% U_k_s[, j, k, s]
+            ) / sigma_k2_s[k, s]
+        
+        ##### sample from a truncated Gamma distribution
+        # lower and upper bounds for truncating the Gamma distribution
+        lb <- 0
+        ub <- 1
+        
+        # upper and lower percentile bounds
+        lp <- pgamma(lb, shape = nk[k], rate = tjk)
+        up <- pgamma(ub, shape = nk[k], rate = tjk)
+        
+        # generate the random sample
+        u <- runif(1, lp, up)
+        # invert the Uniform r.v. to a truncated Gamma r.v.
+        xi_jk <- qgamma(u, shape = nk[k], rate = tjk)
+        # convert xi to Lambda
+        Lambda_k_s[j, k, s] <- 1/xi_jk - 1
+    }
 }

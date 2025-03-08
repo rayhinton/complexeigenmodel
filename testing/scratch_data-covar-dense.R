@@ -6,8 +6,12 @@
 # - nk, number rows per observation matrix
 # - P, dimension of the observed data vectors
 # - d, reduced dimension of interest
-# - bingits, number of iterations for sampling from matrix Bingham distribution
+# - alphaBetaRange - list of min and max of alpha and beta; (0, 1) or (1, 2)?
+# - bing_its, number of iterations for sampling from matrix Bingham distribution
+# - simdataseed, a seed provided by the calling script
 # note: U_k matrices will be Pxd
+
+set.seed(simdataseed)
 
 # generate true underlying covariance matrices ----------------------------
 # Sigma_k = sigma_k^2 * (U_k * Lambda_k * U_k^H + I_P)
@@ -22,8 +26,14 @@ V_0 <- runitary(P, P)
 ##### A and B matrices
 # need to sample in terms of alpha, beta vectors
 # and w scalar
-alpha_0 <- c(1, runif(P-2) |> sort(decreasing = TRUE), 0)
-beta_0 <- c(1, runif(d-2) |> sort(decreasing = TRUE), 0)
+minab <- min(alphaBetaRange)
+maxab <- max(alphaBetaRange)
+alpha_0 <- c(maxab, 
+             runif(P-2, min = minab, max = maxab) |> sort(decreasing = TRUE), 
+             minab)
+beta_0 <- c(maxab, 
+            runif(d-2, min = minab, max = maxab) |> sort(decreasing = TRUE), 
+            minab)
 
 # prior for w scalar 
 # - I believe Hoff is recommending these parameters in terms of the shape and SCALE for the Gamma distribution. Otherwise, a large tau parameter does not seem to lead to a diffuse prior. 
