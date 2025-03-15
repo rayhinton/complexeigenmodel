@@ -29,8 +29,26 @@ set.seed(6032025)
 test_mat <- create_test_matrix(n = 4, deviation = 3e-14)
 
 # Test both functions
-(is_sym <- isSymmetric(test_mat))
-(is_herm <- isHermitian(test_mat))
+isSymmetric(test_mat)
+isHermitian(test_mat)
+
+# At a certain tolerance, it passes isHermitian
+isHermitian(test_mat, tol = 4e-14)
+isHermitian(test_mat, tol = 1e-13)
+100 * .Machine$double.eps
+
+# Rounding the values at a certain point produces a matrix which passes both tests at default parameters
+test_mat2 <- round(test_mat, 13)
+
+isSymmetric(test_mat2)
+isHermitian(test_mat2)
+
+# can I generate from complex Wishart with any of these?
+rcwis(10, test_mat)
+rcwis(10, test_mat2)
+
+eigen(test_mat)$values
+eigen(test_mat2)$values
 
 # Print results
 cat("isSymmetric result:", is_sym, "\n")

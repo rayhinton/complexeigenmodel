@@ -19,15 +19,18 @@ stopifnot(length(nk) == K)
 
 # U_k matrices will be Pxd
 # dimension of the observed vectors
-P <- 6
+P <- 8
 # reduced dimension of interest
-d <- 2
+d <- 4
+
+# min and max of alpha, beta vectors
+alphaBetaRange <- c(1, 2)
 
 # number of iterations for sampling from matrix Bingham distribution
-bing_its <- 1000
+bing_its <- 100
 
 # generate parameters and data (Y_k, P_k) using this script
-simdataseed <- set.seed(15022025)
+simdataseed <- 15022025
 source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/testing/scratch_data-covar-dense.R")
 
 # sampling initialization -------------------------------------------------
@@ -46,8 +49,14 @@ alpha_s <- matrix(NA, P, S)
 beta_s <- matrix(NA, d, S)
 w_s <- vector("numeric", S)
 
-alpha_s[, 1] <- c(1, runif(P-2) |> sort(decreasing = TRUE), 0)
-beta_s[, 1] <- c(1, runif(d-2) |> sort(decreasing = TRUE), 0)
+alpha_s[, 1] <- c(max(alphaBetaRange), 
+                  runif(P-2, min(alphaBetaRange), max(alphaBetaRange)) |> 
+                      sort(decreasing = TRUE), 
+                  min(alphaBetaRange))
+beta_s[, 1] <- c(max(alphaBetaRange), 
+                 runif(d-2, min(alphaBetaRange), max(alphaBetaRange)) |> 
+                     sort(decreasing = TRUE), 
+                 min(alphaBetaRange))
 
 # prior for w scalar 
 # - I believe Hoff is recommending these parameters in terms of the shape and SCALE for the Gamma distribution. Otherwise, a large tau parameter does not seem to lead to a diffuse prior. 
@@ -142,7 +151,7 @@ for (k in 1:K) {
 }
 
 # TODO need to make sure rcmb can sample **square matrices**
-V_s[, , s] <- rcmb(V_s[, , s-1], sumMat, B_s)
+V_s[, , s] <- rcBingUP_gibbs(V_s[, , s-1], sumMat, A_s)
 
 # U_k, eigenvector matrices -----------------------------------------------
 

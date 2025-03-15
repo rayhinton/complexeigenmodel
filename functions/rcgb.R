@@ -145,3 +145,163 @@ rcmb <- function(U, A, B) {
     
     return(U)
 }
+
+
+# rcBingUP ----------------------------------------------------------------
+
+# Description: sample of a small square complex Bingham distribution on U(P)
+
+# Input:
+
+# - A, mxm Hermitian p.d. matrix
+# - B, mxm diagonal real matrix with decreasing entries
+
+# Output:
+
+# - X, mxm, a sample from the complex Bingham(A, B) distribution
+# - nrej, the number of rejections
+
+# Details:
+
+# This is a rejection-based sampler based on Hoff 2009. Currently, it works well
+# for 2x2 matrices, but rejects too often for 3x3 matrices or larger.
+
+# References:
+
+# Hoff, P. D. (2009). Simulation of the Matrix Bingham–von Mises–Fisher Distribution, With Applications to Multivariate and Relational Data. Journal of Computational and Graphical Statistics, 18(2), 438–456. https://doi.org/10.1198/jcgs.2009.07177
+
+rcBingUP <- function(A, B) {
+    
+    stopifnot("A and B must have the same dimensions" = all(dim(A) == dim(B)))
+    stopifnot("A and B must be square" = dim(A)[1] == dim(A)[2])
+    
+    P <- nrow(A)
+    
+    # rescale A and B
+    # TODO verify the 2 points below
+    # - shifting the diagonals does not change the distribution
+    # - shifting A and B by c, 1/c does not change the distribution
+    # shifting
+    diag(A) <- diag(A) - min(eigen(A, only.values = TRUE)$values)
+    diag(B) <- diag(B) - min(diag(B))
+    # scaling
+    # maximum eigenvalue of A is the first one
+    mA <- eigen(A, only.values = TRUE)$values[1]
+    mB <- max(B)
+    # TODO trying a different factor here
+    gd <- (dim(A)[1] + 1) / (2*mB) + mA # this is Hoff
+    # gd <- (dim(A)[1] + 1) / (2*mB) + mA/2
+    # TODO understand why this factor is calculated now
+    del1 <- max(eigen(A, only.values = TRUE)$values) + 0.5
+    gam <- gd/del1
+    
+    # scale
+    A <- A / gam
+    B <- B * gam
+    
+    # get and store the eigenvalues of A
+    Aevals <- eigen(A, only.values = TRUE)$values
+    # TODO calculate del
+    # del <- max(Aevals) + 0.5
+    
+    # TODO trying a different nu
+    nu <- (dim(A)[1] + 1) # this is Hoff
+    # nu <- dim(A)[1]
+    
+    S <- solve(diag(del1, nrow = P) - A)
+    # TODO I am rounding this matrix so that it is Hermitian, within a tolerance that rcwis will accept.
+    tol_digits <- (.Machine$double.eps * 100) |> log10() |> ceiling() |> abs()
+    S <- round(S, tol_digits)
+    
+    rej <- TRUE
+    nrej <- 0
+    while (rej) {
+        # browser()
+        W <- rcwis(nu, S)
+        Weigen <- eigen(W)
+        
+        # TODO do microbenchmark - which is faster? multiplying by a diagonal matrix of +- 1, or using vector recycling?
+        X <- Weigen$vectors
+        L <- Weigen$values
+        
+        X <- X %*% diag((-1)^rbinom(dim(A)[1], 1, .5)) 
+        
+        D <- sort(diag(B) - L, decreasing = TRUE)
+        
+        # the products must be over elements of decreasing order. Eigenvalues
+        # from eigen are in decreasing order by default. D is sorted above.
+        lambda <- sum(Aevals * D)
+        
+        # calculate the log acceptance ratio
+        # part of it might be slightly complex, due to numerical issues
+        # so, use Re
+        # TODO but, I should double-check everything, to justify that it should be real
+        # TODO double-check I am using right B-L matrix, not necessarily the sorted D
+        logr <- Re(sum(diag(
+            diag(B - L) %*% t(Conj(X)) %*% A %*% X))) - 
+            lambda
+        
+        # Accept with probability r
+        # draw u from Unif(0, 1)
+        # TODO can I compare, say, log(u) to the logr? 
+        rej <- log(runif(1)) > logr
+        nrej <- nrej + rej
+    }
+    
+    return(list(X = X, nrej = nrej))
+}
+
+
+# rcBingUP_gibbs ----------------------------------------------------------
+
+# Description: sample a square complex Bingham distribution
+
+# Input:
+
+# X, mxm unitary matrix
+# A, mxm Hermitian positive definite matrix
+# B, mxm diagonal real matrix with decreasing elements
+
+# Output:
+
+# newX, mxm unitary matrix
+
+# Details:
+
+# This function is intended to be used within a Gibbs sampler, where the FCD of
+# X is a complex Bingham (A, B) distribution. The columns, taken two at a time,
+# can be related to a 2x2 matrix z which has a complex Bingham distribution.
+
+# Currently, this function requires that the input X have even dimensions.
+
+rcBingUP_gibbs <- function(X, A, B) {
+    
+    stopifnot("A and B must have the same dimensions" = all(dim(A) == dim(B)))
+    stopifnot("A and B must be square" = dim(A)[1] == dim(A)[2])
+    
+    P <- nrow(A)
+    
+    stopifnot("A and B must have even dimensions" = P %% 2 == 0)
+    
+    # generate a random order of columns
+    scols <- sample(1:P)
+    
+    for (sstep in 1:(P/2)) {
+        # get the random column indices for this step, and put in increasing order. 
+        ijs <- scols[c(sstep*2 - 1, sstep*2)] |> sort()
+        
+        # find an orthonormal basis for the left null space of X without ijs 
+        N <- NullC(X[, -ijs])
+        
+        # transform the original parameters
+        newA <- t(Conj(N)) %*% A %*% N
+        newB <- diag(B[ijs])
+        
+        # browser()
+        # sample the 2x2 columns, and transform back into X columns
+        zsamp <- rcBingUP(newA, newB)
+        X[, ijs] <- N %*% zsamp$X
+    }
+    
+    return(X)
+}

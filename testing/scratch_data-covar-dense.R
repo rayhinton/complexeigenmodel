@@ -78,7 +78,8 @@ for (k in 1:K) {
 # generate data, Y_k and P_k ----------------------------------------------
 
 # generate true mean vectors, mu_k
-mu_k_0 <- rcmvnorm(K, rep(0, P))
+# mu_k_0 <- rcmvnorm(K, rep(0, P))
+mu_k_0 <- matrix(0, K, P)
 
 ###### Y_k, List of observed data matrices
 Y_k <- list()
@@ -91,6 +92,8 @@ for (k in 1:K) {
 P_k <- array(NA, c(P, P, K))
 
 for (k in 1:K) {
-    P_k[, , k] <- t(Conj(Y_k[[k]])) %*% 
-        (diag(nk[k]) - matrix(1/nk[k], nk[k], nk[k])) %*% Y_k[[k]]
+    # P_k[, , k] <- t(Conj(Y_k[[k]])) %*% 
+    #     (diag(nk[k]) - matrix(1/nk[k], nk[k], nk[k])) %*% Y_k[[k]]
+    # P_k [, , k] <- t(Conj(Y_k[[k]])) %*% Y_k[[k]]
+    P_k[, , k] <- rcwis(nk[k], Sigma_k_0[, , k])
 }
