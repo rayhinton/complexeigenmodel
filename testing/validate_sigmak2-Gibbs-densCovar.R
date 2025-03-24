@@ -161,49 +161,77 @@ integrate(dinvgamma, 0, q025, shape = 5, scale = 25)
 
 # Choose different M_k values ---------------------------------------------
 
-n <- 1000
-sigma_02 <- 10
+demo_random_post <- function(Mk, sigma_02, n, Mk_df, ex_its, hpd_round = 11) {
 
-set.seed(14032025)
-Mk <- rcwis(1000, diag(P))
-
-Mk <- eigen(Mk)$vectors %*% 
-    # Mk has eigenvalues of similar scale
-    diag(seq(30, 20, length.out = P)) %*%
-    # Mk has eigenvalues of different scales
-    # diag(seq(1000, 1, length.out = P)) %*%
-    t(Conj(eigen(Mk)$vectors))
-summary(eigen(Mk)$values)
-
-G0 <- round(sigma_02 * Mk, 11)
-isHermitian(G0)
-ex_its <- 1000
-
-post_means <- rep(NA, ex_its)
-post_CIs <- matrix(NA, ex_its, 2)
-
-for (i in 1:ex_its) {
-  Pk <- rcwis(n, G0)
-  
-  ak <- .ak_sigmak2_densCovar(P, n)
-  bk <- .bk_sigmak2_densCovar(Mk, Pk)
-  
-  post_means[i] <- bk / (ak-1)
-  post_CIs[i, 1] <- 1/qgamma(.975, shape = ak, rate = bk)
-  post_CIs[i, 2] <- 1/qgamma(.025, shape = ak, rate = bk)
+    P <- ncol(Mk)
+    print("Summary of eigenvalues for M_k matrix: ")
+    print(summary(eigen(Mk)$values))
+    
+    G0 <- round(sigma_02 * Mk, hpd_round)
+    # isHermitian(G0)
+    
+    post_means <- rep(NA, ex_its)
+    post_CIs <- matrix(NA, ex_its, 2)
+    
+    for (i in 1:ex_its) {
+      Pk <- rcwis(n, G0)
+      
+      ak <- .ak_sigmak2_densCovar(P, n)
+      bk <- .bk_sigmak2_densCovar(Mk, Pk)
+      
+      post_means[i] <- bk / (ak-1)
+      post_CIs[i, 1] <- 1/qgamma(.975, shape = ak, rate = bk)
+      post_CIs[i, 2] <- 1/qgamma(.025, shape = ak, rate = bk)
+    }
+    
+    print(
+      paste0("True sigma2 is within 95% cred. int. ", 
+             round(100*mean((post_CIs[, 1] <= sigma_02) & (sigma_02 <= post_CIs[, 2])), 2),
+             "% of the time"))
+    
+    print(paste0("Median .025 posterior quantiles: ",
+             median(post_CIs[, 1]) |> round(3)))
+    print(paste0("Median .975 posterior quantiles: ",
+             median(post_CIs[, 2]) |> round(3)))
+    print(paste0("Mean of posterior means: ",
+             mean(post_means) |> round(3)))
+    print(paste0("Median of posterior means: ",
+             median(post_means) |> round(3)))
+    
+    plot(density(post_means),
+         main = "Dens. of posterior means")
+    abline(v = sigma_02, col = "red")
 }
 
-mean((post_CIs[, 1] <= sigma_02) & (sigma_02 <= post_CIs[, 2]))
-mean(post_CIs[, 1])
-median(post_CIs[, 1])
-mean(post_CIs[, 2])
-median(post_CIs[, 2])
+n <- 1000
+sigma_02 <- 5
+ex_its <- 1000
+Mk_df <- 1000
+hpd_round <- 11
 
-plot(density(post_means))
-abline(v = sigma_02, col = "red")
+set.seed(14032025)
+Mk <- rcwis(Mk_df, diag(P))
 
-mean(post_means)
-median(post_means)
+Mk <- eigen(Mk)$vectors %*% 
+  # Mk has eigenvalues of similar scale
+  diag(seq(30, 20, length.out = P)) %*%
+  # Mk has eigenvalues of different scales
+  # diag(seq(1000, 1, length.out = P)) %*%
+  t(Conj(eigen(Mk)$vectors))
+
+demo_random_post(Mk, sigma_02, n, Mk_df, ex_its, hpd_round = hpd_round)
+
+set.seed(14032025)
+Mk <- rcwis(Mk_df, diag(P))
+
+Mk <- eigen(Mk)$vectors %*% 
+  # Mk has eigenvalues of similar scale
+  # diag(seq(30, 20, length.out = P)) %*%
+  # Mk has eigenvalues of different scales
+  diag(seq(1000, 1, length.out = P)) %*%
+  t(Conj(eigen(Mk)$vectors))
+
+demo_random_post(Mk, sigma_02, n, Mk_df, ex_its, hpd_round = hpd_round)
 
 # compare mean traces from rcwis ------------------------------------------
 

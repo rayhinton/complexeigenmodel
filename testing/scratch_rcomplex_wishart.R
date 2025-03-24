@@ -54,7 +54,8 @@ rcomplex_wishart <- function(n, p, Sigma = NULL) {
     Sigma_sqrt <- eigen_vectors %*% diag(sqrt(eigen_values)) %*% Conj(t(eigen_vectors))
     
     # Generate standard complex normal matrix (real and imaginary parts are independent normal)
-    Z <- matrix(rnorm(n * p), nrow = n, ncol = p) + 1i * matrix(rnorm(n * p), nrow = n, ncol = p)
+    Z <- matrix(rnorm(n * p, sd = sqrt(0.5)), nrow = n, ncol = p) + 
+        1i * matrix(rnorm(n * p, sd = sqrt(0.5)), nrow = n, ncol = p)
     
     # Transform Z using the square root of Sigma
     X <- Z %*% Sigma_sqrt

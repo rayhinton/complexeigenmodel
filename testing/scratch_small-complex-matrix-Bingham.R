@@ -12,8 +12,9 @@
 # TODO perhaps write a separate complex Wishart sampler
 library(cmvnorm)
 source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/functions/rcgb.R")
+source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/testing/scratch_rcomplex_wishart.R")
 
-P <- 2
+P <- 3
 
 set.seed(26022025)
 A <- rcwis(P, diag(P))

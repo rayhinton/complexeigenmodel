@@ -33,7 +33,7 @@ source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmod
 
 # Overview
 
-In this vignette, I demonstrate the FCD sampler for the $\sigma_k^2$ parameters in the covariance model with dense eigenvectors. If we consider all of the other parameters in the model as fixed, then in this case, the individual FCDs are essentially like marginal posterior distributions, which we can determine exactly. The sampler does reproduce these known posterior distributions. However, as I will show, the posterior distributions can be extremely biased away from the true parameter value. Thus, I am left with a mixed conclusion: the sampler "recovers the true parameter value" only in some cases, but it does appear to sample from the correct distribution.
+In this vignette, I demonstrate the FCD sampler for the $\sigma_k^2$ parameters in the covariance model with dense eigenvectors. If we consider all of the other parameters in the model as fixed, then in this case, the individual FCDs are essentially like marginal posterior distributions, which we can determine exactly. The sampler does reproduce these known posterior distributions. However, as I will show, the posterior distributions can be extremely biased away from the true parameter value. Thus, I am left with a mixed conclusion: the sampler does not always recover the true parameter value, but it does appear to sample from the correct distribution. Additional code is include in the final section, for reference.
 
 # Model description
 
@@ -68,7 +68,7 @@ E \left[ tr(M_k^{-1} P_k) / (P n_k - 1)  \right] &= (P n_k - 1)^{-1} tr[E(M_k^{-
 \end{aligned}
 $$
 
-Thus, the posterior mean becomes less biased as $n_k$ increases, and does not appear to depend on $M_k$.
+Thus, the posterior mean becomes less biased as $n_k$ increases, and does not appear to depend on $M_k$. However, as we will see, this contradicts what will be shown later, which is that the posterior distributions become quite biased when the eigenvalues of $M_k$ are changed.
 
 # Compare sampler to known posterior
 
@@ -86,33 +86,40 @@ In this section, I will show that the sampler function does indeed sample from t
 demo_FCD <- function(Lambda_ks, P = 12, d = 4, K = 3, nk_scale = 1000, 
                      gibbs_its = 5000) {
     
+    # degrees of freedom of the data generating CW distributions
     n_k <- nk_scale + 5*(1:K)
-    # number of Gibbs iterations, for testing
-    gibbs_its <- 5000
     
+    # stores the K data matrices
     data_list <- list()
     
+    # stores simulated U_k eigenvector matrices
     U_ks <- array(NA, c(P, d, K))
 
+    # known sigma_k2 values, ranging from 5 to 20
     sigma_k20 <- seq(5, 20, length.out = K)
     
+    # generate simulated parameters and data matrices
     for (k in 1:K) {
+        # U_k matrices are semi-unitary
         U_ks[, , k] <- runitary(P, d)
         
         # temp matrix
         M_k <- diag(P) + 
             U_ks[, , k] %*% diag(Lambda_ks[, k]) %*% t(Conj(U_ks[, , k]))
         M_k <- round(M_k, 9)
+        
+        # display a summary of the eigenvalues of the 
         print(paste0("Summary of eigenvalues for M_",k," matrix"))
         print(summary(eigen(M_k)$values))
         
         data_list[[k]] <- rcwis(n_k[k], sigma_k20[k] * M_k)
+        # data_list[[k]] <- rcwis(n_k[k], Conj(sigma_k20[k] * M_k))
     }
     
-    # stand-in for sigma_k2, the parameters to be sampled
+    # sigma_k2, the parameters to be sampled
     sigma_k2s <- vector("numeric", K)
     
-    ##### Parameters list
+    # parameters list
     param_list <- list(P = P,
                        d = d,
                        K = K,
@@ -121,10 +128,7 @@ demo_FCD <- function(Lambda_ks, P = 12, d = 4, K = 3, nk_scale = 1000,
                        Lambda_ks = Lambda_ks,
                        sigma_k2s = sigma_k2s)
     
-    # test function
-    sigmak2_gibbs_densCovar(data_list, param_list)
-    
-    # test the function within a sampling loop
+    # Test the function within a sampling loop
     # initialize an array to track the sigma_k2 values
     sigma_k2_S <- array(NA, c(K, gibbs_its))
     
@@ -135,8 +139,7 @@ demo_FCD <- function(Lambda_ks, P = 12, d = 4, K = 3, nk_scale = 1000,
     }
     
     # in this case, we know that the distribution should be certain Inv Gammas
-    
-    # Exact posterior mean
+    # exact posterior mean
     print("Exact posterior means")
     for (k in 1:K) {
         # temp matrix
@@ -145,8 +148,10 @@ demo_FCD <- function(Lambda_ks, P = 12, d = 4, K = 3, nk_scale = 1000,
         print(Re(sum(diag(solve(M_k) %*% data_list[[k]]))) / (P * n_k[k] - 1))
     }
     
+    # discard the first half of samples
     post_samples <- round(gibbs_its/2):gibbs_its
     
+    # Compare exact posterior means to the sample mean and known values
     # Sample posterior mean
     print("Sample posterior means")
     print(rowMeans(sigma_k2_S[, post_samples]))
@@ -154,9 +159,8 @@ demo_FCD <- function(Lambda_ks, P = 12, d = 4, K = 3, nk_scale = 1000,
     print("Known sigma_k2 values")
     print(sigma_k20)
     
-    par(mfrow = c(1, 3))
-    
     # plot observed and true densities
+    par(mfrow = c(1, 3))
     for (k in 1:K) {
         xmin <- min(sigma_k2_S[k, post_samples]) * .8
         xmax <- max(sigma_k2_S[k, post_samples]) * 1.2
@@ -166,9 +170,11 @@ demo_FCD <- function(Lambda_ks, P = 12, d = 4, K = 3, nk_scale = 1000,
         M_k <- diag(P) + 
             U_ks[, , k] %*% diag(Lambda_ks[, k]) %*% t(Conj(U_ks[, , k]))
         
-        ak <- P*n_k[k]
-        bk <- Re(sum(diag(solve(M_k) %*% data_list[[k]])))
-        # TODO note the transformation required to plot inverse gamma, i.e. /x^2,
+        # ak <- P*n_k[k]
+        ak <- .ak_sigmak2_densCovar(P, n_k[k])
+        # bk <- Re(sum(diag(solve(M_k) %*% data_list[[k]])))
+        bk <- .bk_sigmak2_densCovar(M_k, data_list[[k]])
+        # note the transformation required to plot inverse gamma, i.e. /x^2,
         curve(dgamma(1/x, shape = ak, rate = bk) / x^2,
           from = xmin, to = xmax, n = 501, add = TRUE,
           col = "red", ylab = "density")
@@ -183,27 +189,26 @@ The matrix $M_k$ is generated in a similar way to that in our larger model, wher
 
 In this first example, the randomly generated Lambda values are low, all below 2. Note that for, say, the $M_1$ matrix, the "Summary of eigenvalues" results shows that the eigenvalues are all on a similar order of magnitude. The same is true for the $M_2$ and $M_3$ matrices.
 
-In the demonstration, a data matrix $P_k$ is generated for each of the $K$ groups. The function `sigmak2_gibbs_densCovar` is used to generate samples from the respective posteriors. After discarding half the generated samples, we can calculate the posterior mean from the samples, and also the exact posterior mean. We can compare these to the true $\sigma_{k0}^2$ values. 
+In the demonstration, a data matrix $P_k$ is generated for each of the $K$ groups. The function `sigmak2_gibbs_densCovar` is used to generate samples from the respective posteriors. After discarding half the generated samples as a burn-in, we can calculate the posterior mean. We can compare these to the exact posterior means of the known Inverse Gamma distributions, and also to the true $\sigma_{k0}^2$ values. 
 
 The exact and sampled posterior means are very close. They are all slightly positively biased compared to the true $\sigma_{k0}^2$ values. The sampled densities are all very close to the true Inverse Gamma densities.
 
 ```{r demo-run-well-behaved, echo=TRUE}
-P = 12
-d = 4
-K = 3
-nk_scale = 1000
-gibbs_its = 5000
+P <- 12
+d <- 4
+K <- 3
+nk_scale <- 1000
+gibbs_its <- 5000
 
 set.seed(13032025)
 Lambda_ks <- array(NA, c(d, K))
-# different Lambda values (eigenvalues) lead to different estimator quality
+# different Lambda values (eigenvalues) lead to different estimator quality.
+# These values lead to M_k matrices with eigenvalues from about 3 to 1.
 for(k in 1:K) {
-    # Lambda_ks[, k] <- seq(4+k, -0.95+k, length.out = d)
     Lambda_ks[, k] <- rgamma(d, 1, 1) |> sort(decreasing = TRUE)
-    # Lambda_ks[, k] <- seq(5, 10^(k/2), length.out = d) |> sort(decreasing = TRUE)
-    # Lambda_ks[, k] <- seq(5, 10^(k), length.out = d) |> sort(decreasing = TRUE)
 }
 
+# The generated Lambda values. Read down column k to see the values for group k.
 print(Lambda_ks)
 
 demo_FCD(Lambda_ks)
@@ -218,11 +223,13 @@ The result is that the exact and sample posterior means match, and the observed 
 ```{r demo-run-poorly-behaved, echo=TRUE}
 set.seed(13032025)
 Lambda_ks <- array(NA, c(d, K))
-# different Lambda values (eigenvalues) lead to different estimator quality
+# different Lambda values (eigenvalues) lead to different estimator quality.
+# These values lead to eigenvalues on different scales.
 for(k in 1:K) {
     Lambda_ks[, k] <- seq(5, 10^(k/2), length.out = d) |> sort(decreasing = TRUE)
 }
 
+# Read down column k to see the values for group k.
 print(Lambda_ks)
 
 demo_FCD(Lambda_ks)
@@ -230,7 +237,125 @@ demo_FCD(Lambda_ks)
 
 # Evaluating the distribution of the posterior mean
 
-In this section, we consider whether the posterior distributions which result from randomly observed data will "recover" a known true $\sigma_k^2$ value. That is, if we start with a known $\sigma_k^2$ value and generate multiple observations of $P_k$ using that value, how do the resulting posterior distributions behave? Are the posterior means, $E [\sigma_k^2 | P_k] = tr(M_k^{-1} P_k) / (P n_k - 1)$, close to the true parameter value? Do posterior credible intervals often contain the true parameter value?
+In this section, we consider whether the posterior distributions which result from randomly observed data will "recover" a known true $\sigma_k^2$ value. That is, if we start with a known $\sigma_k^2$ value and generate multiple observations of $P_k$ using that value, how do the resulting posterior distributions behave, due to the randomness in the data $P_k$? Are the posterior means, $E [\sigma_k^2 | P_k] = tr(M_k^{-1} P_k) / (P n_k - 1)$, close to the true parameter value? Do posterior credible intervals often contain the true parameter value?
+
+```{r demo_random_post-func, include=FALSE}
+#####
+# Distribution of random posteriors function
+#
+# demonstrates how the posterior distributions vary based on randomness of data.
+#####
+
+demo_random_post <- function(Mk, sigma_02, n, Mk_df, ex_its, hpd_round = 11) {
+
+    P <- ncol(Mk)
+    print("Summary of eigenvalues for M_k matrix: ")
+    print(summary(eigen(Mk)$values))
+    
+    # parameter to the data generating CW distribution
+    G0 <- round(sigma_02 * Mk, hpd_round)
+    
+    # pre-allocated arrays for posterior summaries
+    post_means <- rep(NA, ex_its)
+    post_CIs <- matrix(NA, ex_its, 2)
+    
+    # for different observed data matrices Pk, calculate posterior summaries
+    for (i in 1:ex_its) {
+        # generate a new data observation
+        Pk <- rcwis(n, G0)
+        # Pk <- rcwis(n, Conj(G0))
+        # Pk <- rcomplex_wishart(n, P, .5*G0)
+        
+        # calculate the Inverse Gamma parameters
+        ak <- .ak_sigmak2_densCovar(P, n)
+        bk <- .bk_sigmak2_densCovar(Mk, Pk)
+        
+        # calculate the exact Inverse Gamma mean and .025, .975 quantiles
+        post_means[i] <- bk / (ak-1)
+        post_CIs[i, 1] <- 1/qgamma(.975, shape = ak, rate = bk)
+        post_CIs[i, 2] <- 1/qgamma(.025, shape = ak, rate = bk)
+    }
+    
+    # Print summaries of the posteriors
+    print(
+      paste0("True sigma2 is within 95% cred. int. ", 
+             round(100*mean((post_CIs[, 1] <= sigma_02) & (sigma_02 <= post_CIs[, 2])), 2),
+             "% of the time"))
+    
+    print(paste0("Median .025 posterior quantiles: ",
+             median(post_CIs[, 1]) |> round(3)))
+    print(paste0("Median .975 posterior quantiles: ",
+             median(post_CIs[, 2]) |> round(3)))
+    print(paste0("Mean of posterior means: ",
+             mean(post_means) |> round(3)))
+    print(paste0("Median of posterior means: ",
+             median(post_means) |> round(3)))
+    
+    # Plot the distribution of the observed posterior means
+    plot(density(post_means),
+         main = "Dens. of posterior means")
+    abline(v = sigma_02, col = "red")
+}
+```
+
+## A case somewhat close
+
+First, we look at a case where the true parameter is recovered most of the time. The eigenvalues for the CW covariance matrix are on a similar scale (30 to 20). The true parameter is within the 95% credible intervals 68.3% of the time. The mean of the posterior means is 5.068, which would seem to match the expectation that the posterior mean is a slightly positively biased estimator. However, even this is more biased than would be expected, since $\sigma_0^2(Pn) / (Pn-1) = 5.000415$ in this case.
+
+```{r demo-rand-post-good}
+# this demo has eigenvalues on a similar scale, and has decent coverage of the true sigma2 parameter
+
+# true parameter value
+sigma_02 <- 5
+
+n <- 1005 # df of the data generating CW distribution
+ex_its <- 1000 # number of samples to draw
+Mk_df <- 1000 # df of the CW dist. that generates the Mk parameter
+hpd_round <- 11 # digits to round the Mk matrix, to ensure it is exactly hpd
+
+# generate the parameter matrix for the data generating CW distribution
+set.seed(14032025)
+Mk <- rcwis(Mk_df, diag(P))
+
+# modify the eigenvalues, to have a similar scale
+Mk <- eigen(Mk)$vectors %*% 
+    diag(seq(30, 20, length.out = P)) %*%
+    t(Conj(eigen(Mk)$vectors))
+
+# a function that generates samples Pk, and calculates posterior quantities
+demo_random_post(Mk, sigma_02, n, Mk_df, ex_its, hpd_round = hpd_round)
+```
+
+## Poor coverage with eigenvalues similar to a previous example
+
+Next, we investigate a similar setup, but with eigenvalues in the CW covariance matrix that are similar to those in the $k=1$ group from the previous section. That is, the first $P-d = 8$ eigenvalues range from 1.848 to 1.0021, and the remaining $d = 4$ eigenvalues are 1.
+
+In this case, the coverage of the true parameter is very poor: $\sigma_0^2$ is within the 95% credible intervals 0.3% of the time. The mean of the posterior means is 5.226, even though the expected value of this estimator is still 5.000415. Even though this seems close, the posterior distributions only have substantial mass in narrow regions, so they are fairly biased compared to the true parameter value. 
+
+```{r demo-rand-post-recreate-bad}
+# this example recreates the eigenvalues from one of the previous examples, and
+# has bad coverage.
+
+sigma_02 <- 5
+
+n <- 1005
+ex_its <- 1000
+Mk_df <- 1000
+hpd_round <- 11
+
+set.seed(14032025)
+Mk <- rcwis(Mk_df, diag(P))
+
+# set eigenvalues to be similar to those from a previous example, with the 
+# final d eigenvalues repeated.
+Mk <- eigen(Mk)$vectors %*% 
+    diag(c(seq(1.848, 1.0021, length.out = P-d), rep(1, d))) %*%
+    t(Conj(eigen(Mk)$vectors))
+
+demo_random_post(Mk, sigma_02, n, Mk_df, ex_its, hpd_round = hpd_round)
+```
+
+
 
 \newpage
 
@@ -243,6 +368,20 @@ In this section, we consider whether the posterior distributions which result fr
 
 sigmak2_gibbs_densCovar
 
+#####
+# .ak_sigmak2_densCovar
+#####
+
+.ak_sigmak2_densCovar
+
+#####
+# .bk_sigmak2_densCovar
+#####
+
+.bk_sigmak2_densCovar
+
 <<demo-function>>
+
+<<demo_random_post-func>>
 ```
 
