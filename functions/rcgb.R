@@ -2,7 +2,7 @@
 # as in Abdallah et al. 2020
 
 library(rstiefel)
-library(cmvnorm)
+# library(cmvnorm)
 library(mvtnorm)
 
 # fr <- function(b, betas) {
@@ -177,48 +177,86 @@ rcBingUP <- function(A, B) {
     
     P <- nrow(A)
     
-    # rescale A and B
-    # TODO verify the 2 points below
-    # - shifting the diagonals does not change the distribution
-    # - shifting A and B by c, 1/c does not change the distribution
-    # shifting
-    diag(A) <- diag(A) - min(eigen(A, only.values = TRUE)$values)
-    diag(B) <- diag(B) - min(diag(B))
-    # scaling
-    # maximum eigenvalue of A is the first one
-    mA <- eigen(A, only.values = TRUE)$values[1]
-    mB <- max(B)
-    # TODO trying a different factor here
-    gd <- (dim(A)[1] + 1) / (2*mB) + mA # this is Hoff
-    # gd <- (dim(A)[1] + 1) / (2*mB) + mA/2
-    # TODO understand why this factor is calculated now
-    del1 <- max(eigen(A, only.values = TRUE)$values) + 0.5
-    gam <- gd/del1
+    ################################
+    # original scaling of A and B from supplemental paper
+    ################################
     
-    # scale
-    A <- A / gam
-    B <- B * gam
+    # # rescale A and B
+    # # TODO verify the 2 points below
+    # # - shifting the diagonals does not change the distribution
+    # # - shifting A and B by c, 1/c does not change the distribution
+    # # shifting
+    # diag(A) <- diag(A) - min(eigen(A, only.values = TRUE)$values)
+    # diag(B) <- diag(B) - min(diag(B))
+    # # scaling
+    # # maximum eigenvalue of A is the first one
+    # mA <- eigen(A, only.values = TRUE)$values[1]
+    # mB <- max(B)
+    # # TODO trying a different factor here
+    # # gd <- (dim(A)[1] + 1) / (2*mB) + mA # this is Hoff
+    # # gd <- (dim(A)[1] + 1) / (mB) + mA # this seems to lead to better acceptance rates for 2x2, but maybe worse, or at least gets stuck at one, for 3x3?
+    # gd <- (dim(A)[1] + 1) / (mB) + mA
+    # # TODO understand why this factor is calculated now
+    # del1 <- max(eigen(A, only.values = TRUE)$values) + 0.5
+    # gam <- gd/del1
+    # 
+    # # scale
+    # A <- A / gam
+    # B <- B * gam
+    # 
+    # As[, , i] <- A
+    # Bs[, , i] <- B
+    # 
+    # # get and store the eigenvalues of A
+    # Aevals <- eigen(A, only.values = TRUE)$values
+    # # TODO calculate del
+    # # del <- max(Aevals) + 0.5
+    # 
+    # # TODO trying a different nu
+    # nu <- (dim(A)[1] + 1) # this is Hoff
+    # # nu <- dim(A)[1]
     
-    # get and store the eigenvalues of A
-    Aevals <- eigen(A, only.values = TRUE)$values
-    # TODO calculate del
-    # del <- max(Aevals) + 0.5
+    ################################
+    # end of original scaling of A and B from supplemental paper
+    ################################
     
-    # TODO trying a different nu
-    nu <- (dim(A)[1] + 1) # this is Hoff
-    # nu <- dim(A)[1]
+    ################################
+    # alternative scaling of A and B from rstiefel
+    ################################
     
-    S <- solve(diag(del1, nrow = P) - A)
+    b <- diag(B)
+    bmx <- max(b)
+    bmn <- min(b)
+    
+    A <- A*(bmx-bmn)
+    b <- (b-bmn) / (bmx-bmn)
+    
+    Aevals <- eigen(A)$val
+    diag(A) <- diag(A) - Aevals[1]
+    Aevals <- eigen(A)$val
+    
+    nu <- max(dim(A)[1]+1,round(-Aevals[length(Aevals)]))
+    del1 <- nu/2
+    # TODO right now, I am also dividing this by 2 again in the sample of W
+    # perhaps I should just make this, divide by 4?
+    S <- solve( diag(del1,nrow=dim(A)[1] ) - A )/2
+    
+    ################################
+    # end of alternative scaling of A and B from rstiefel
+    ################################
+    
+    
+    # S <- solve(diag(del1, nrow = P) - A)
     # TODO I am rounding this matrix so that it is Hermitian, within a tolerance that rcwis will accept.
     tol_digits <- (.Machine$double.eps * 100) |> log10() |> ceiling() |> abs()
-    S <- round(S, tol_digits)
+    S <- round(S, tol_digits-1)
     
     rej <- TRUE
     nrej <- 0
     while (rej) {
         # browser()
-        # W <- rcwis(nu, S)
-        W <- rcomplex_wishart(nu, P, S)
+        # W <- rcwis(nu, Conj(S)/2)
+        W <- rcomplex_wishart(nu, P, S/2)
         Weigen <- eigen(W)
         
         # TODO do microbenchmark - which is faster? multiplying by a diagonal matrix of +- 1, or using vector recycling?

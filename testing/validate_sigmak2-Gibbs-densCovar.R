@@ -1,8 +1,9 @@
 # validate the sigmak2 Gibbs sampler for dense covariance matrix model
 
-library(cmvnorm)
+# library(cmvnorm)
 source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/functions/generatedata.R")
 source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/functions/FCD_sigmak2.R")
+source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/testing/scratch_rcomplex_wishart.R")
 
 # dense covariance model
 
@@ -22,17 +23,17 @@ source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmod
 # - a vector of sampled sigmak2 values
 
 demo_FCD <- function(Lambda_ks, P = 12, d = 4, K = 3, nk_scale = 1000, 
+                     sigma_k20_range = c(5, 20),
                      gibbs_its = 5000) {
     
     n_k <- nk_scale + 5*(1:K)
-    # number of Gibbs iterations, for testing
-    gibbs_its <- 5000
     
     data_list <- list()
     
     U_ks <- array(NA, c(P, d, K))
 
-    sigma_k20 <- seq(5, 20, length.out = K)
+    sigma_k20 <- seq(min(sigma_k20_range), max(sigma_k20_range), 
+                     length.out = K)
     
     for (k in 1:K) {
         U_ks[, , k] <- runitary(P, d)
@@ -44,7 +45,8 @@ demo_FCD <- function(Lambda_ks, P = 12, d = 4, K = 3, nk_scale = 1000,
         print(paste0("Summary of eigenvalues for M_",k," matrix"))
         print(summary(eigen(M_k)$values))
         
-        data_list[[k]] <- rcwis(n_k[k], sigma_k20[k] * M_k)
+        # data_list[[k]] <- rcwis(n_k[k], sigma_k20[k] * M_k)
+        data_list[[k]] <- rcomplex_wishart(n_k[k], P, sigma_k20[k] * M_k)
     }
     
     # stand-in for sigma_k2, the parameters to be sampled
@@ -83,6 +85,7 @@ demo_FCD <- function(Lambda_ks, P = 12, d = 4, K = 3, nk_scale = 1000,
         print(Re(sum(diag(solve(M_k) %*% data_list[[k]]))) / (P * n_k[k] - 1))
     }
     
+    # discard the first half of the MCMC samples
     post_samples <- round(gibbs_its/2):gibbs_its
     
     # Sample posterior mean
@@ -133,9 +136,9 @@ set.seed(13032025)
 Lambda_ks <- array(NA, c(d, K))
 # different Lambda values (eigenvalues) lead to different estimator quality
 for(k in 1:K) {
-    Lambda_ks[, k] <- rgamma(d, 1, 1) |> sort(decreasing = TRUE)
+    # Lambda_ks[, k] <- rgamma(d, 1, 1) |> sort(decreasing = TRUE)
     # Lambda_ks[, k] <- seq(5, 10^(k/2), length.out = d) |> sort(decreasing = TRUE)
-    # Lambda_ks[, k] <- seq(5, 10^(k), length.out = d) |> sort(decreasing = TRUE)
+    Lambda_ks[, k] <- seq(5, 10^(k), length.out = d) |> sort(decreasing = TRUE)
 }
 
 demo_FCD(Lambda_ks)
@@ -174,7 +177,8 @@ demo_random_post <- function(Mk, sigma_02, n, Mk_df, ex_its, hpd_round = 11) {
     post_CIs <- matrix(NA, ex_its, 2)
     
     for (i in 1:ex_its) {
-      Pk <- rcwis(n, G0)
+      # Pk <- rcwis(n, G0)
+      Pk <- rcomplex_wishart(n, P, G0)
       
       ak <- .ak_sigmak2_densCovar(P, n)
       bk <- .bk_sigmak2_densCovar(Mk, Pk)
@@ -210,7 +214,8 @@ Mk_df <- 1000
 hpd_round <- 11
 
 set.seed(14032025)
-Mk <- rcwis(Mk_df, diag(P))
+# Mk <- rcwis(Mk_df, diag(P))
+Mk <- rcomplex_wishart(Mk_df, P, diag(P))
 
 Mk <- eigen(Mk)$vectors %*% 
   # Mk has eigenvalues of similar scale
@@ -222,7 +227,8 @@ Mk <- eigen(Mk)$vectors %*%
 demo_random_post(Mk, sigma_02, n, Mk_df, ex_its, hpd_round = hpd_round)
 
 set.seed(14032025)
-Mk <- rcwis(Mk_df, diag(P))
+# Mk <- rcwis(Mk_df, diag(P))
+Mk <- rcomplex_wishart(Mk_df, P, diag(P))
 
 Mk <- eigen(Mk)$vectors %*% 
   # Mk has eigenvalues of similar scale
