@@ -1,0 +1,409 @@
+---
+title: ""
+subtitle: ""
+author: ""
+date: ""
+header-includes:
+    - \usepackage{amsmath}
+    # - \pagenumbering{gobble}
+output:
+    pdf_document:
+        highlight: default
+        includes: 
+            in_header: "linebreak.tex"
+    html_document: default
+---
+
+\setcounter{page}{1}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, fig.height = 4, 
+                      cache = FALSE)
+# setwd("G:/My Drive/STAT626/HW06")
+
+# declare libraries
+# library(ggplot2)
+
+# rm(list = ls())
+
+library(truncdist)
+
+source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/functions/generatedata.R")
+source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/testing/scratch_rcomplex_wishart.R")
+source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/functions/FCD_Lambdak.R")
+```
+
+# Overview
+
+In this vignette, I demonstrate the FCD sampler for the $\Lambda_k$ parameters in the covariance model with dense eigenvectors. If we consider all of the other parameters in the model as fixed, then the FCDs are essentially the posterior distributions for the unknown $\Lambda_k$ values. In this case, we can compare a transformation to an exact distribution. Thus, I will show that the sampler reproduces the exact density, and also that the posterior means and credible intervals recover known parameter values. Additional code is included in the final section, for reference.
+
+# Model description
+
+**Data model:** Data matrices $Y_k$ are $P \times P$  Hermitian positive definite. $n_k$ is the number of samples corresponding to data matrix $Y_k$.
+
+$$
+\begin{aligned}
+Y_k | \sigma_k^2, U_k, \Lambda_k \sim \text{ComplexWishart}(n_k, \sigma_k^2 [U_k \Lambda_k U_k^H + I_P]) 
+\end{aligned}
+$$
+
+**Prior:** Denote $diag(\Lambda_k) = (\lambda_{1,k}, \ldots, \lambda_{d,k})'$, and let $\omega_{j,k} = \lambda_{j,k} / (1 + \lambda_{j,k})$. We use independent Uniform(0, 1) priors on $\omega_{j,k}$.
+
+**FCD:** It can be shown that the data likelihood is proportional to a product of terms like $\exp[a_{j,k} \omega_{j,k}] (1 - \omega_{j,k})^{n_k}$, where $a_{j,k} = (u_{j,k}^H Y_k u_{j,k)})/\sigma_k^2$. Define $\xi_{j,k} = 1 - \omega_{j,k}$, and observe
+
+$$
+\begin{aligned}
+    \exp[a_{j,k} (1 - \xi_{j,k})] (\xi_{j,k})^{n_k} &= \exp[a_{j,k} - a_{j,k}\xi_{j,k}] (\xi_{j,k})^{n_k} \\
+    &\propto \exp[ -a_{j,k}\xi_{j,k}] (\xi_{j,k})^{n_k}.
+\end{aligned}
+$$
+
+Thus, each $\xi_{j,k}$ has an independent Gamma$(n_k+1, a_{j,k})$ FCD, truncated to (0, 1). With a sampled $\xi_{j,k}$, one can calculate $\lambda_{j,k} = (1/\xi_{j,k}) - 1$.
+
+# Compare sampler to known posterior
+
+In this section, I will show that the sampler function does indeed sample from the correct distribution, which we know exactly (in terms of $\xi_{j,k}$). If we generate samples with the function, their empirical density matches the exact density that I expect. 
+
+In terms of estimating the actual parameters, the posterior means at least seem somewhat plausible, and the true parameter values are all contained in 95% credible intervals. In the subsequent section, I will show how the credible intervals and posterior means perform across multiple observations of data.
+
+```{r demo-function, include=FALSE}
+#####
+# Posterior demonstration function
+#
+# Generates true parameter values and data using those values.
+# Draws samples from posterior using the sampling function to be validated.
+# Calculates observed and exact posterior means, and plots observed and exact posterior densities.
+#
+#####
+
+# initial parameters
+K <- 2
+n_k <- 100 + (1:K)*10
+P <- 8
+d <- 4
+maxL <- 1000
+minL <- 2
+
+# number of sampling iterations
+S <- 2000
+# which samples to keep for posterior analysis
+gibbskeep <- round(S/2):S
+
+# true Lambda values
+Lambda_k_0 <- array(NA, c(d, K))
+
+# generate parameters
+U_ks <- array(NA, c(P, d, K))
+Lambda_ks <- array(NA, c(d, K))
+sigma_k2s <- array(NA, c(K))
+
+data_list <- list()
+
+set.seed(27032025)
+for (k in 1:K) {
+    # generate random true parameters
+    U <- runitary(P, d)
+    sigma2 <- 0.5 + (k-1)*5
+    Lambda_0 <- sort(runif(d, minL, maxL), decreasing = TRUE)
+    
+    # data generating parameter
+    Sigma_0 <- sigma2 * ( U %*% diag(Lambda_0) %*% t(Conj(U)) + diag(P) )
+    
+    # generate data value
+    data_list[[k]] <- rcomplex_wishart(n_k[k], P, Sigma_0)
+    
+    # store values in arrays to be put in param_list
+    U_ks[, , k] <- U
+    sigma_k2s[k] <- sigma2
+    Lambda_k_0[, k] <- Lambda_0
+}
+
+# create param_list
+param_list <- list(
+    P = P,
+    d = d,
+    K = K,
+    n_k = n_k,
+    U_ks = U_ks,
+    # placeholder values, 1, for Lambda
+    Lambda_ks = array(1, c(d, K)),
+    sigma_k2s = sigma_k2s
+)
+
+# prepare to do sampling over different data observations
+Ytests <- 1
+yi <- 1
+postmeans <- array(NA, c(d, K, Ytests))
+CI95s <- array(NA, c(2, d, K, Ytests))
+inpostCIs <- array(NA, c(d, K, Ytests))
+
+# generate new data matrices
+for (k in 1:K) {
+    Sigma_0 <- sigma_k2s[k] * ( U_ks[, , k] %*% diag(Lambda_k_0[, k]) %*% 
+                              t(Conj(U_ks[, , k])) + diag(P) )
+    data_list[[k]] <- rcomplex_wishart(n_k[[k]], P, Sigma_0)
+}
+
+# holds all sampled Lambda values
+Lambda_s <- array(NA, c(d, K, S))
+    
+# sample the posterior with these observations
+for (s in 1:S) {
+    Lambda_s[, , s] <- Lambdak_gibbs_densCovar(data_list, param_list)
+    param_list$Lambda_ks <- Lambda_s[, , s]
+}
+
+# calculate some posterior summaries for this Y value
+for (k in 1:K) {
+    # calculate posterior means
+    postmeans[, k, yi] <- apply(Lambda_s[, k, gibbskeep, drop = FALSE],
+                                c(1), mean)
+    
+    # get a 95% credible interval for each Lambda
+    CI95 <- apply(Lambda_s[, k, gibbskeep, drop = FALSE], 
+                   c(1), quantile, probs = c(0.025, 0.975))
+    CI95s[, , k, yi] <- CI95
+    
+    # do the CIs contain Lambda_0?
+    inpostCIs[, k, yi] <- 
+        (Lambda_k_0[, k] > CI95[1, ]) & (Lambda_k_0[, k] < CI95[2, ])         
+}
+```
+
+```{r one-post-summaries, echo=FALSE}
+print("k = 1")
+k <- 1
+compare_post_Lambda1 <- cbind(Lambda_k_0[, k],
+                              postmeans[, k, 1],
+                              t(CI95s[, , k, 1]))
+colnames(compare_post_Lambda1) <- c("True Lambda_j", "Posterior mean", "0.025 quant.", "0.975 quant.")
+print(as.data.frame(compare_post_Lambda1))
+
+print("k = 2")
+k <- 2
+compare_post_Lambda2 <- cbind(Lambda_k_0[, k],
+                              postmeans[, k, 1],
+                              t(CI95s[, , k, 1]))
+colnames(compare_post_Lambda2) <- c("True Lambda_j", "Posterior mean", "0.025 quant.", "0.975 quant.")
+print(as.data.frame(compare_post_Lambda2))
+```
+
+Below are comparisons of the observed and exact posterior densities of $\xi_{j,k}$. The vertical lines are the true values. The black curves are the empirical densities, and the red curves are the exact densities.
+
+```{r one-post-densities, echo=FALSE}
+# plot observed densities -------------------------------------------------
+par_default <- par()
+par(mfrow = c(2, 2), mar = c(3, 4, 1, 1))
+
+for (k in 1:K) {
+    print(paste0("k = ", k))
+    for (j in 1:d) {
+        ### plot on the xi scale, i.e. in [0, 1]
+        # calculate helper terms and density values
+        ajk <- Re(t(Conj(U_ks[, j, k])) %*% data_list[[k]] %*% U_ks[, j, k]) / sigma_k2s[k]
+        xs <- seq(0, 1, length.out = 100001)
+        truncgammas <- dtrunc(xs, "gamma", a = 0, b = 1, shape = n_k[k]+1, rate = ajk)
+        
+        # plot observed and true density
+        plot(density(1/(1+Lambda_s[j, k, gibbskeep])),
+             main = paste0("Observed and true for k=", k, ", j=",j),
+             xlab = "")
+        abline(v = 1/(1+Lambda_k_0[j, k]))
+        lines(xs, truncgammas, col = "red")
+    }
+}
+par(par_default)
+```
+
+# Comparing estimate over multiple posteriors
+
+In this section, I repeatedly sample posterior distributions after generating new data matrices, to observe the bias in the posterior distributions and the coverage of 95% credible intervals. 200 posterior distributions are sampled, for 2000 iterations each, with 1000 iterations of burn-in. The 95% credible intervals exhibit >90% coverage. As an estimator, the posterior mean does not appear especially biased.
+
+```{r multiple-posteriors, cache=TRUE, include=FALSE}
+# initial parameters
+K <- 3
+n_k <- 100 + (1:K)*10
+P <- 8
+d <- 4
+maxL <- 1000
+minL <- 2
+
+# number of sampling iterations
+S <- 2000
+# which samples to keep for posterior analysis
+gibbskeep <- round(S/2):S
+
+# true Lambda values
+Lambda_k_0 <- array(NA, c(d, K))
+
+# generate parameters
+U_ks <- array(NA, c(P, d, K))
+Lambda_ks <- array(NA, c(d, K))
+sigma_k2s <- array(NA, c(K))
+
+data_list <- list()
+
+set.seed(26032025)
+for (k in 1:K) {
+    # generate random true parameters
+    U <- runitary(P, d)
+    sigma2 <- 0.5 + (k-1)*5
+    Lambda_0 <- sort(runif(d, minL, maxL), decreasing = TRUE)
+    
+    # data generating parameter
+    Sigma_0 <- sigma2 * ( U %*% diag(Lambda_0) %*% t(Conj(U)) + diag(P) )
+    
+    # generate data value
+    data_list[[k]] <- rcomplex_wishart(n_k[k], P, Sigma_0)
+    
+    # store values in arrays to be put in param_list
+    U_ks[, , k] <- U
+    sigma_k2s[k] <- sigma2
+    Lambda_k_0[, k] <- Lambda_0
+}
+
+# create param_list
+param_list <- list(
+    P = P,
+    d = d,
+    K = K,
+    n_k = n_k,
+    U_ks = U_ks,
+    # placeholder values, 1, for Lambda
+    Lambda_ks = array(1, c(d, K)),
+    sigma_k2s = sigma_k2s
+)
+
+# prepare to do sampling over different data observations
+Ytests <- 200
+postmeans <- array(NA, c(d, K, Ytests))
+inpostCIs <- array(NA, c(d, K, Ytests))
+
+set.seed(26032025)
+for (yi in 1:Ytests) {
+    # generate new data matrices
+    for (k in 1:K) {
+        Sigma_0 <- sigma_k2s[k] * ( U_ks[, , k] %*% diag(Lambda_k_0[, k]) %*% 
+                                  t(Conj(U_ks[, , k])) + diag(P) )
+        data_list[[k]] <- rcomplex_wishart(n_k[[k]], P, Sigma_0)
+    }
+
+    # holds all sampled Lambda values
+    Lambda_s <- array(NA, c(d, K, S))
+    
+    # sample the posterior with these observations
+    for (s in 1:S) {
+        Lambda_s[, , s] <- Lambdak_gibbs_densCovar(data_list, param_list)
+        param_list$Lambda_ks <- Lambda_s[, , s]
+    }
+
+    # calculate some posterior summaries for this Y value
+    for (k in 1:K) {
+        # calculate posterior means
+        postmeans[, k, yi] <- apply(Lambda_s[, k, gibbskeep, drop = FALSE],
+                                    c(1), mean)
+        
+        # get a 95% credible interval for each Lambda
+        CI95 <- apply(Lambda_s[, k, gibbskeep, drop = FALSE], 
+                       c(1), quantile, probs = c(0.025, 0.975))
+        # do the CIs contain Lambda_0?
+        inpostCIs[, k, yi] <- 
+            (Lambda_k_0[, k] > CI95[1, ]) & (Lambda_k_0[, k] < CI95[2, ])         
+    }
+}
+```
+```{r multiple-post-summaries, echo=FALSE}
+print("Coverage of 95% credible intervals")
+post_coverage <- apply(inpostCIs[, , ], c(1, 2), mean) |> as.data.frame()
+colnames(post_coverage) <- paste0("k=", 1:K)
+rownames(post_coverage) <- paste0("j=", 1:d)
+print(post_coverage)
+
+print("Average posterior means")
+post_means <- apply(postmeans[, , ], c(1, 2), mean) |> as.data.frame()
+colnames(post_means) <- paste0("k=", 1:K)
+rownames(post_means) <- paste0("j=", 1:d)
+print(post_means)
+
+print("True Lambda values")
+colnames(Lambda_k_0) <- paste0("k=", 1:K)
+rownames(Lambda_k_0) <- paste0("j=", 1:d)
+print(Lambda_k_0)
+```
+
+# Large parameter viability
+
+In this section, I briefly demonstrate that the sampler works for large parameter dimensions, like we may see in applications. I set $P = 64$, such as in a 64-channel EEG; $d = 4$, representing reduction to 4 dimensions; and $K = 200$, representing a sample size of 200 EEG signals. The following is a summary of repeated evaluations using `microbenchmark()`. On my laptop, with no parallelization, the time to run a single sampling step is on the order of 10 milliseconds. 
+
+```{r large-param, echo=FALSE}
+# initial parameters
+K <- 200
+n_k <- 100 + (1:K)*10
+P <- 64
+d <- 4
+maxL <- 1000
+minL <- 2
+
+# number of sampling iterations
+S <- 2000
+# which samples to keep for posterior analysis
+gibbskeep <- round(S/2):S
+
+# true Lambda values
+Lambda_k_0 <- array(NA, c(d, K))
+
+# generate parameters
+U_ks <- array(NA, c(P, d, K))
+Lambda_ks <- array(NA, c(d, K))
+sigma_k2s <- array(NA, c(K))
+
+data_list <- list()
+
+set.seed(26032025)
+for (k in 1:K) {
+    # generate random true parameters
+    U <- runitary(P, d)
+    sigma2 <- 0.5 + (k-1)*5
+    Lambda_0 <- sort(runif(d, minL, maxL), decreasing = TRUE)
+    
+    # data generating parameter
+    Sigma_0 <- sigma2 * ( U %*% diag(Lambda_0) %*% t(Conj(U)) + diag(P) )
+    
+    # generate data value
+    data_list[[k]] <- rcomplex_wishart(n_k[k], P, Sigma_0)
+    
+    # store values in arrays to be put in param_list
+    U_ks[, , k] <- U
+    sigma_k2s[k] <- sigma2
+    Lambda_k_0[, k] <- Lambda_0
+}
+
+# create param_list
+param_list <- list(
+    P = P,
+    d = d,
+    K = K,
+    n_k = n_k,
+    U_ks = U_ks,
+    # placeholder values, 1, for Lambda
+    Lambda_ks = array(1, c(d, K)),
+    sigma_k2s = sigma_k2s
+)
+
+microbenchmark::microbenchmark(
+    large_sample <- Lambdak_gibbs_densCovar(data_list, param_list))
+```
+
+
+\newpage
+
+# Appendix
+
+```{r echo=TRUE}
+#####
+# Lambdak_gibbs_densCovar
+#####
+
+Lambdak_gibbs_densCovar
+```
+

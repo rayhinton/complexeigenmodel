@@ -170,6 +170,8 @@ rcmb <- function(U, A, B) {
 
 # Hoff, P. D. (2009). Simulation of the Matrix Bingham–von Mises–Fisher Distribution, With Applications to Multivariate and Relational Data. Journal of Computational and Graphical Statistics, 18(2), 438–456. https://doi.org/10.1198/jcgs.2009.07177
 
+# Hoff, P.D. rstiefel. https://github.com/pdhoff/rstiefel/tree/master.
+
 rcBingUP <- function(A, B) {
     
     stopifnot("A and B must have the same dimensions" = all(dim(A) == dim(B)))
