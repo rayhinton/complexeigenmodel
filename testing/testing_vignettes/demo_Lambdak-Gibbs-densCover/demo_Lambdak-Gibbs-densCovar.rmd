@@ -208,7 +208,7 @@ for (k in 1:K) {
         plot(density(1/(1+Lambda_s[j, k, gibbskeep])),
              main = paste0("Observed and true for k=", k, ", j=",j),
              xlab = "")
-        abline(v = 1/(1+Lambda_k_0[j, k]))
+        abline(v = 1/(1+Lambda_k_0[j, k]), lty = 2, col = "red")
         lines(xs, truncgammas, col = "red")
     }
 }

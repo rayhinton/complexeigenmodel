@@ -1,5 +1,54 @@
 # scratch for rejection sampler for small complex square matrix Bingham dist.
 
+# my.rCbing.Op <- function(A,B) {
+#         #simulate from the bingham distribution on O(p) 
+#         #having density proportional to etr(B t(U)%*%A%*%U ) 
+#         #using the rejection sampler described in Hoff(2009)
+#         #this only works for small matrices, otherwise the sampler
+#         #will reject too frequently
+#         
+#         ### assumes B is a diagonal matrix with *decreasing* entries 
+#         
+#         b<-diag(B) ; bmx<-max(b) ; bmn<-min(b)  
+#         if(bmx>bmn)
+#         { 
+#             A<-A*(bmx-bmn) ; b<-(b-bmn)/(bmx -bmn)
+#             vlA<-eigen(A)$val  
+#             diag(A)<-diag(A)-vlA[1]
+#             vlA<-eigen(A)$val  
+#             
+#             nu<- max(dim(A)[1]+1,round(-vlA[length(vlA)]))
+#             del<- nu/2
+#             # M<- solve( diag(del,nrow=dim(A)[1] ) - A )/2
+#             M<- solve( diag(del,nrow=dim(A)[1] ) - A )
+#             
+#             rej<-TRUE
+#             # cholM<-chol(M)
+#             nrej<-0
+#             while(rej)
+#             {
+#                 # Z<-matrix(rnorm(nu*dim(M)[1]),nrow=nu,ncol=dim(M)[1])
+#                 # Y<-Z%*%cholM ; 
+#                 # tmp<-eigen(t(Y)%*%Y)
+#                 
+#                 W <- rcomplex_wishart(nu, dim(A)[1], M)
+#                 tmp <- eigen(W)
+#                 
+#                 U<-tmp$vec%*%diag((-1)^rbinom(dim(A)[1],1,.5)) ; L<-diag(tmp$val)
+#                 D<-diag(b)-L
+#                 
+#                 lrr<- Re(sum(diag(( D %*% t(Conj(U)) %*% A %*% U)) )) - 
+#                     sum( -sort(diag(-D))*vlA)
+#                 
+#                 rej<- ( log(runif(1))> lrr )
+#                 nrej<-nrej+rej
+#             }
+#         }
+#         if(bmx==bmn) { U<-rustiefel(dim(A)[1],dim(A)[1]) } 
+#         
+#         return(list(X=U, nrej = nrej))
+#     }
+
 # first, do it with no scaling
 
 # output: a PxP matrix
@@ -10,11 +59,11 @@
 
 ??wishart
 # TODO perhaps write a separate complex Wishart sampler
-library(cmvnorm)
+# library(cmvnorm)
 source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/functions/rcgb.R")
 source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/testing/scratch_rcomplex_wishart.R")
 
-P <- 2
+P <- 3
 
 set.seed(26022025)
 # A <- rcwis(P, diag(P))
@@ -26,8 +75,9 @@ B <- diag(sort(rgamma(P, 1, 1), decreasing = TRUE))
 # exp(logr)
 
 rcBingUP(A, B)
+my.rCbing.Op(A, B)
 
-reps <- 2000
+reps <- 1000
 nrejs <- rep(NA, reps)
 tracestat <- rep(NA, reps)
 As <- array(NA, c(P, P, reps))
@@ -36,20 +86,23 @@ Bs <- array(NA, c(P, P, reps))
 set.seed(8032025)
 
 for (i in 1:reps) {
-    if (i%% 20 == 0) print(i)
+    if (i%% 50 == 0) print(i)
 
     # A <- rcwis(P, diag(P))
     A <- rcomplex_wishart(P, P, diag(P))
     # B is a real diagonal matrix, with descending values
     B <- diag(sort(rgamma(P, 1, 1), decreasing = TRUE))    
     
+    As[, , i] <- A
+    Bs[, , i] <- B
+    
     ################################
     ### function
     ################################
     
-    i_sample <- rcBingUP(A, B)
+    # i_sample <- rcBingUP(A, B)
+    i_sample <- my.rCbing.Op(A, B)
     
-
     ### end of function
     # i_sample <- list(X = X, nrej = nrej)
         
@@ -58,43 +111,38 @@ for (i in 1:reps) {
     tracestat[i] <- Re(sum(diag(B %*% t(Conj(i_sample$X)) %*% A %*% i_sample$X)))
 }
 
-# investigate S, if there are issues with the most recently sampled value after an error
-# are the eigenvalues real and positive?
-eigen(S)$values
-# is S Hermitian?
-S - t(Conj(S))
-isSymmetric(S)
+# show the 10 worst numbers of rejections
+nrejs[order(nrejs, decreasing = TRUE)[1:10]]
 
-S_round <- round(S, digits = tol_digits-1)
-eigen(S_round)$values
-S_round - t(Conj(S_round))
-isSymmetric(S_round)
+# show the A and B matrices with the worst rejections
+whichworst <- 2
+nrejs[order(nrejs, decreasing = TRUE)[whichworst]]
+# As[, , order(nrejs, decreasing = TRUE)[whichworst]]
+Bs[, , order(nrejs, decreasing = TRUE)[whichworst]]
 
-eigen(A)$values
-isSymmetric(A)
+eigen(As[, , order(nrejs, decreasing = TRUE)[whichworst]])$values
 
+B12ratios <- rep(NA, reps)
+for (i in 1:reps) {
+    B12ratios[i] <- Bs[1, 1, i] / Bs[2, 2, i]
+}
+B12ratios[order(nrejs, decreasing = TRUE)[1:10]]
+plot(log(nrejs+1), log(B12ratios))
 
-# investigate last A, B parameters for issues -----------------------------
-
-As[, , which.min(nrejs)] |> eigen()
-As[, , which.max(nrejs)] |> eigen()
-
-Bs[, , which.min(nrejs)] |> diag()
-Bs[, , which.max(nrejs)] |> diag()
-
-plot(ifelse(nrejs == 0, 0, log(nrejs)) + runif(reps, -.1, .1), log(Bs[1, 1, ] / Bs[2, 2, ]))
 
 # look at summaries -------------------------------------------------------
 
 summary(nrejs)
 quantile(nrejs, c(0.95, 0.99))
+quantile(nrejs, c(0.95, 0.99), na.rm = TRUE)
 plot(density(Re(tracestat)))
 plot(log(nrejs), log(tracestat))
 
 
 eigen(i_sample$X)
 t(Conj(i_sample$X[1:4])) %*% i_sample$X[1:4]
-# Hoff's function from paper
+
+# Hoff's function from paper --------------------------------------------
 ### 
 rwish<-function(nu,M,cholM=chol(M)) 
 { 
@@ -103,6 +151,48 @@ rwish<-function(nu,M,cholM=chol(M))
     t(Y)%*%Y 
 } 
 ### 
+
+###
+my.rbing.Op <- function(A,B) {
+        #simulate from the bingham distribution on O(p) 
+        #having density proportional to etr(B t(U)%*%A%*%U ) 
+        #using the rejection sampler described in Hoff(2009)
+        #this only works for small matrices, otherwise the sampler
+        #will reject too frequently
+        
+        ### assumes B is a diagonal matrix with *decreasing* entries 
+        
+        b<-diag(B) ; bmx<-max(b) ; bmn<-min(b)  
+        if(bmx>bmn)
+        { 
+            A<-A*(bmx-bmn) ; b<-(b-bmn)/(bmx -bmn)
+            vlA<-eigen(A)$val  
+            diag(A)<-diag(A)-vlA[1]
+            vlA<-eigen(A)$val  
+            
+            nu<- max(dim(A)[1]+1,round(-vlA[length(vlA)]))
+            del<- nu/2
+            M<- solve( diag(del,nrow=dim(A)[1] ) - A )/2
+            
+            rej<-TRUE
+            cholM<-chol(M)
+            nrej<-0
+            while(rej)
+            {
+                Z<-matrix(rnorm(nu*dim(M)[1]),nrow=nu,ncol=dim(M)[1])
+                Y<-Z%*%cholM ; tmp<-eigen(t(Y)%*%Y)
+                U<-tmp$vec%*%diag((-1)^rbinom(dim(A)[1],1,.5)) ; L<-diag(tmp$val)
+                D<-diag(b)-L
+                lrr<- sum(diag(( D%*%t(U)%*%A%*%U)) ) - sum( -sort(diag(-D))*vlA)
+                rej<- ( log(runif(1))> lrr )
+                # nrej<-nrej+1
+                nrej <- nrej + rej
+            }
+        }
+        if(bmx==bmn) { U<-rustiefel(dim(A)[1],dim(A)[1]) } 
+        return(list(U=U, nrej = nrej))
+    }
+
 ### 
 rZ.AB<-function(A,B) { 
     #rescale A and B, and select gamma, to improve acceptance rate 
@@ -113,6 +203,7 @@ rZ.AB<-function(A,B) {
     del<-max(eigen(A)$val) +.5 ; gam<-gd/del 
     A<-A/gam ; B<-B*gam ; 
     vA<-diag(eigen(A)$val) 
+
     
     S<- solve( diag(del,nrow=dim(A)[1] ) - A )/2 
     nu<-dim(A)[1]+1 
@@ -131,13 +222,68 @@ rZ.AB<-function(A,B) {
     
 } 
 
-P <- 4
+P <- 3
 
 set.seed(26022025)
 A <- rWishart(1, P, diag(P))[ , , 1]
 # A is Hermitian
-A <- A %*% t(Conj(A))
+# A <- A %*% t(Conj(A))
 # B is a real diagonal matrix, with descending values
 B <- diag(sort(rgamma(P, 1, 1), decreasing = TRUE))
 
 rZ.AB(A, B)
+my.rbing.Op(A, B)
+
+# repeated testing
+reps <- 5000
+nrejs <- rep(NA, reps)
+tracestat <- rep(NA, reps)
+As <- array(NA, c(P, P, reps))
+Bs <- array(NA, c(P, P, reps))
+# set.seed(26022025)
+set.seed(8032025)
+
+for (i in 1:reps) {
+    if (i%% 100 == 0) print(i)
+    
+    # A <- rcwis(P, diag(P))
+    # A <- rcomplex_wishart(P, P, diag(P))
+    A <- rWishart(1, P+1, diag(P))[, , 1]
+    # B is a real diagonal matrix, with descending values
+    B <- diag(sort(rgamma(P, 1, 1), decreasing = TRUE))    
+    
+    ################################
+    ### function
+    ################################
+    
+    # i_sample <- rZ.AB(A, B)
+    i_sample <- my.rbing.Op(A, B)
+    As[, , i] <- A
+    Bs[, , i] <- B
+    
+    
+    ### end of function
+    # i_sample <- list(X = X, nrej = nrej)
+    
+    nrejs[i] <- i_sample$nrej
+}
+
+summary(nrejs)
+quantile(nrejs, c(0.95, 0.99))
+
+# show the 10 worst numbers of rejections
+nrejs[order(nrejs, decreasing = TRUE)[1:10]]
+
+# show the A and B matrices with the worst rejections
+whichworst <- 1
+nrejs[order(nrejs, decreasing = TRUE)[whichworst]]
+As[, , order(nrejs, decreasing = TRUE)[whichworst]]
+Bs[, , order(nrejs, decreasing = TRUE)[whichworst]]
+
+eigen(As[, , order(nrejs, decreasing = TRUE)[whichworst]])$values
+
+B12ratios <- rep(NA, reps)
+for (i in 1:reps) {
+    B12ratios[i] <- Bs[1, 1, i] / Bs[2, 2, i]
+}
+B12ratios[order(nrejs, decreasing = TRUE)[1:20]]

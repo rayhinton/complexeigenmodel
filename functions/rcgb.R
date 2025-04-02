@@ -183,10 +183,10 @@ rcBingUP <- function(A, B) {
     # original scaling of A and B from supplemental paper
     ################################
     
-    # # rescale A and B
-    # # TODO verify the 2 points below
-    # # - shifting the diagonals does not change the distribution
-    # # - shifting A and B by c, 1/c does not change the distribution
+    # rescale A and B
+    # TODO verify the 2 points below
+    # - shifting the diagonals does not change the distribution
+    # - shifting A and B by c, 1/c does not change the distribution
     # # shifting
     # diag(A) <- diag(A) - min(eigen(A, only.values = TRUE)$values)
     # diag(B) <- diag(B) - min(diag(B))
@@ -197,7 +197,7 @@ rcBingUP <- function(A, B) {
     # # TODO trying a different factor here
     # # gd <- (dim(A)[1] + 1) / (2*mB) + mA # this is Hoff
     # # gd <- (dim(A)[1] + 1) / (mB) + mA # this seems to lead to better acceptance rates for 2x2, but maybe worse, or at least gets stuck at one, for 3x3?
-    # gd <- (dim(A)[1] + 1) / (mB) + mA
+    # gd <- (dim(A)[1]) / (2*mB) + mA
     # # TODO understand why this factor is calculated now
     # del1 <- max(eigen(A, only.values = TRUE)$values) + 0.5
     # gam <- gd/del1
@@ -206,17 +206,14 @@ rcBingUP <- function(A, B) {
     # A <- A / gam
     # B <- B * gam
     # 
-    # As[, , i] <- A
-    # Bs[, , i] <- B
-    # 
     # # get and store the eigenvalues of A
     # Aevals <- eigen(A, only.values = TRUE)$values
     # # TODO calculate del
     # # del <- max(Aevals) + 0.5
     # 
     # # TODO trying a different nu
-    # nu <- (dim(A)[1] + 1) # this is Hoff
-    # # nu <- dim(A)[1]
+    # # nu <- (dim(A)[1] + 1) # this is Hoff
+    # nu <- dim(A)[1]
     
     ################################
     # end of original scaling of A and B from supplemental paper
@@ -229,26 +226,28 @@ rcBingUP <- function(A, B) {
     b <- diag(B)
     bmx <- max(b)
     bmn <- min(b)
-    
+
     A <- A*(bmx-bmn)
     b <- (b-bmn) / (bmx-bmn)
-    
+
     Aevals <- eigen(A)$val
     diag(A) <- diag(A) - Aevals[1]
     Aevals <- eigen(A)$val
+
+    nu <- max(dim(A)[1]+1,round(-Aevals[length(Aevals)])) # rstiefel original
+    # nu <- max(dim(A)[1]+1,round(-Aevals[length(Aevals)]))
+    # nu <- dim(A)[1]+1
     
-    nu <- max(dim(A)[1]+1,round(-Aevals[length(Aevals)]))
-    del1 <- nu/2
-    # TODO right now, I am also dividing this by 2 again in the sample of W
-    # perhaps I should just make this, divide by 4?
-    S <- solve( diag(del1,nrow=dim(A)[1] ) - A )/2
+    del1 <- nu/2 # rstiefel original
+    # del1 <- nu
+    # del1 <- Aevals[1] + 0.5
     
     ################################
     # end of alternative scaling of A and B from rstiefel
     ################################
     
     
-    # S <- solve(diag(del1, nrow = P) - A)
+    S <- solve(diag(del1, nrow = P) - A)
     # TODO I am rounding this matrix so that it is Hermitian, within a tolerance that rcwis will accept.
     tol_digits <- (.Machine$double.eps * 100) |> log10() |> ceiling() |> abs()
     S <- round(S, tol_digits-1)
@@ -257,8 +256,8 @@ rcBingUP <- function(A, B) {
     nrej <- 0
     while (rej) {
         # browser()
-        # W <- rcwis(nu, Conj(S)/2)
-        W <- rcomplex_wishart(nu, P, S/2)
+        # W <- rcomplex_wishart(nu, P, S/2)
+        W <- rcomplex_wishart(nu, P, S)
         Weigen <- eigen(W)
         
         # TODO do microbenchmark - which is faster? multiplying by a diagonal matrix of +- 1, or using vector recycling?
@@ -292,6 +291,60 @@ rcBingUP <- function(A, B) {
     return(list(X = X, nrej = nrej))
 }
 
+my.rCbing.Op <- function(A,B, istatus = 0) {
+    #simulate from the bingham distribution on O(p) 
+    #having density proportional to etr(B t(U)%*%A%*%U ) 
+    #using the rejection sampler described in Hoff(2009)
+    #this only works for small matrices, otherwise the sampler
+    #will reject too frequently
+    
+    ### assumes B is a diagonal matrix with *decreasing* entries 
+    
+    b<-diag(B) ; bmx<-max(b) ; bmn<-min(b)  
+    if(bmx>bmn)
+    { 
+        A<-A*(bmx-bmn) ; b<-(b-bmn)/(bmx -bmn)
+        vlA<-eigen(A)$val  
+        diag(A)<-diag(A)-vlA[1]
+        vlA<-eigen(A)$val  
+        
+        nu<- max(dim(A)[1]+1,round(-vlA[length(vlA)]))
+        del<- nu/2
+        # M<- solve( diag(del,nrow=dim(A)[1] ) - A )/2
+        M<- solve( diag(del,nrow=dim(A)[1] ) - A )
+        
+        rej<-TRUE
+        # cholM<-chol(M)
+        nrej<-0
+        while(rej)
+        {
+            # Z<-matrix(rnorm(nu*dim(M)[1]),nrow=nu,ncol=dim(M)[1])
+            # Y<-Z%*%cholM ; 
+            # tmp<-eigen(t(Y)%*%Y)
+            
+            W <- rcomplex_wishart(nu, dim(A)[1], M)
+            tmp <- eigen(W)
+            
+            U<-tmp$vec%*%diag((-1)^rbinom(dim(A)[1],1,.5)) ; L<-diag(tmp$val)
+            D<-diag(b)-L
+            
+            lrr<- Re(sum(diag(( D %*% t(Conj(U)) %*% A %*% U)) )) - 
+                sum( -sort(diag(-D))*vlA)
+            
+            rej<- ( log(runif(1))> lrr )
+            nrej<-nrej+rej
+            
+            # print number of rejections
+            if (istatus) {
+                if (nrej %% istatus == 0) print(paste0("my.rCbing.Op nrej = ", nrej))
+            }
+        }
+    }
+    if(bmx==bmn) { U<-rustiefel(dim(A)[1],dim(A)[1]) } 
+    
+    return(list(X=U, nrej = nrej))
+}
+
 
 # rcBingUP_gibbs ----------------------------------------------------------
 
@@ -315,7 +368,7 @@ rcBingUP <- function(A, B) {
 
 # Currently, this function requires that the input X have even dimensions.
 
-rcBingUP_gibbs <- function(X, A, B) {
+rcBingUP_gibbs <- function(X, A, B, istatus = 0) {
     
     stopifnot("A and B must have the same dimensions" = all(dim(A) == dim(B)))
     stopifnot("A and B must be square" = dim(A)[1] == dim(A)[2])
@@ -325,6 +378,7 @@ rcBingUP_gibbs <- function(X, A, B) {
     stopifnot("A and B must have even dimensions" = P %% 2 == 0)
     
     # generate a random order of columns
+    # perhaps a neater way: matrix(sample(1:4), ncol = 2, byrow = TRUE)
     scols <- sample(1:P)
     
     for (sstep in 1:(P/2)) {
@@ -338,9 +392,10 @@ rcBingUP_gibbs <- function(X, A, B) {
         newA <- t(Conj(N)) %*% A %*% N
         newB <- diag(B[ijs])
         
-        # browser()
         # sample the 2x2 columns, and transform back into X columns
-        zsamp <- rcBingUP(newA, newB)
+        # zsamp <- rcBingUP(newA, newB)
+        
+        zsamp <- my.rCbing.Op(newA, newB, istatus = istatus)
         X[, ijs] <- N %*% zsamp$X
     }
     
