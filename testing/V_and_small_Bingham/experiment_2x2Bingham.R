@@ -27,10 +27,10 @@ microbenchmark::microbenchmark(ZZ %*% diag(diagpart),
 A <- rWishart(1, 3, diag(3))[, , 1]
 
 (Av <- 1/sqrt(2) * matrix(c(1, 1, -1, 1), ncol = 2))
-(A <- Av %*% diag(c(2, 1)) %*% t(Av))
+(A <- Av %*% diag(c(80, 20)) %*% t(Av))
 eigen(A)
 
-B <- diag(c(20, 1))
+B <- diag(c(4, 1))
 
 # reference vector
 ur <- matrix(c(1, 0), ncol = 1)
@@ -135,7 +135,7 @@ Uc_fs <- array(NA, dim = c(2, 2, its))
 ur <- matrix(c(1 +0i, 0+0i), ncol = 1)
 for (i in 1:its) {
     # generate a random matrix
-    U <- my.rCbing.Op(A, B)$X
+    U <- my.rCbing.Op(A, B, istatus = 100)$X
     # store the raw sample
     Ucs[, , i] <- U
     

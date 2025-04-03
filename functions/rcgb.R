@@ -266,11 +266,13 @@ rcBingUP <- function(A, B) {
         
         X <- X %*% diag((-1)^rbinom(dim(A)[1], 1, .5)) 
         
-        D <- sort(diag(B) - L, decreasing = TRUE)
+        # D <- sort(diag(B) - L, decreasing = TRUE)
+        D <- diag(b) - diag(L)
+        dtilde <- sort(diag(D), decreasing = TRUE)
         
         # the products must be over elements of decreasing order. Eigenvalues
         # from eigen are in decreasing order by default. D is sorted above.
-        lambda <- sum(Aevals * D)
+        lambda <- sum(Aevals * dtilde)
         
         # calculate the log acceptance ratio
         # part of it might be slightly complex, due to numerical issues
@@ -278,7 +280,7 @@ rcBingUP <- function(A, B) {
         # TODO but, I should double-check everything, to justify that it should be real
         # TODO double-check I am using right B-L matrix, not necessarily the sorted D
         logr <- Re(sum(diag(
-            diag(B - L) %*% t(Conj(X)) %*% A %*% X))) - 
+            D %*% t(Conj(X)) %*% A %*% X))) - 
             lambda
         
         # Accept with probability r
@@ -308,6 +310,10 @@ my.rCbing.Op <- function(A,B, istatus = 0) {
         diag(A)<-diag(A)-vlA[1]
         vlA<-eigen(A)$val  
         
+        # RJH, to prevent nu from being too large when there are negative eigenvalues
+        nu_df <- dim(A)[1]+1
+        # nu_df <- max(dim(A)[1]+1,round(-vlA[length(vlA)]))
+        # Hoff nu
         nu<- max(dim(A)[1]+1,round(-vlA[length(vlA)]))
         del<- nu/2
         # M<- solve( diag(del,nrow=dim(A)[1] ) - A )/2
@@ -322,21 +328,26 @@ my.rCbing.Op <- function(A,B, istatus = 0) {
             # Y<-Z%*%cholM ; 
             # tmp<-eigen(t(Y)%*%Y)
             
-            W <- rcomplex_wishart(nu, dim(A)[1], M)
+            W <- rcomplex_wishart(nu_df, dim(A)[1], M)
             tmp <- eigen(W)
             
             U<-tmp$vec%*%diag((-1)^rbinom(dim(A)[1],1,.5)) ; L<-diag(tmp$val)
             D<-diag(b)-L
             
-            lrr<- Re(sum(diag(( D %*% t(Conj(U)) %*% A %*% U)) )) - 
-                sum( -sort(diag(-D))*vlA)
+            lrr1 <- Re(sum(diag(( D %*% t(Conj(U)) %*% A %*% U)) ))
+            lambda <- sum( -sort(diag(-D))*vlA)
+            
+            lrr<- lrr1 - lambda
             
             rej<- ( log(runif(1))> lrr )
             nrej<-nrej+rej
             
             # print number of rejections
             if (istatus) {
-                if (nrej %% istatus == 0) print(paste0("my.rCbing.Op nrej = ", nrej))
+                if (nrej %% istatus == 0) {
+                    print(paste0("my.rCbing.Op nrej = ", nrej, "; lambda = ", lambda,
+                                 "; lrr1 = ", lrr1))
+                }
             }
         }
     }
