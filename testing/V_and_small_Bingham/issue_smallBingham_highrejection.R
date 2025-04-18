@@ -6,7 +6,9 @@ source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmod
 
 its <- 1000
 
-Aevals <- c(5, 1)
+C <- diag(c(2, 1))
+
+Aevals <- c(80, 20)
 
 (Av <- 1/sqrt(2) * matrix(c(1, 1, -1, 1), ncol = 2))
 (A <- Av %*% diag(Aevals) %*% t(Av))
@@ -15,14 +17,19 @@ eigen(A)
 B <- diag(c(4, 1))
 
 # observe that the number of rejections is high
-my.rCbing.Op(A, B, istatus = 100)
+(X <- my.rCbing.Op(A, B, istatus = 100))
+
+X$X %*% t(Conj(X$X))
+X$X %*% C %*% t(Conj(X$X))
 
 Ucs <- array(NA, dim = c(2, 2, its))
 Uc_fs <- array(NA, dim = c(2, 2, its))
+Covs <- array(NA, dim = c(2, 2, its))
 nrejs <- rep(NA, its)
 
 # reference vector
 ur <- matrix(c(1 +0i, 0+0i), ncol = 1)
+set.seed(3042025)
 for (i in 1:its) {
     # generate a random matrix
     Usamp <- my.rCbing.Op(A, B)
@@ -41,9 +48,14 @@ for (i in 1:its) {
     
     # store the modified sample
     Uc_fs[, , i] <- U
+    
+    # store a "covariance" matrix from the sampled value
+    Covs[, , i] <- U %*% C %*% t(Conj(U))
 }
 
 (Uc_fs_mean <- apply(Uc_fs, c(1, 2), mean))
+Covs_mean <- apply(Covs, c(1, 2), mean)
+eigen(Covs_mean)
 Av
 
 t(Conj(Uc_fs_mean)) %*% Uc_fs_mean

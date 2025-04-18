@@ -1,9 +1,9 @@
 # sample from complex matrix Bingham distribution
 # as in Abdallah et al. 2020
 
-library(rstiefel)
+# library(rstiefel)
 # library(cmvnorm)
-library(mvtnorm)
+# library(mvtnorm)
 
 # fr <- function(b, betas) {
 #     return(abs(sum(1 / (b + 2*betas)) - 1))
@@ -13,9 +13,25 @@ library(mvtnorm)
 bfind <- function(lambda) {
     q <- length(lambda)
     fb <- function(b) 1 - sum(1/(b + 2*lambda))
-    if (sum(lambda^2) == 0) b0 <- q
-    else b0 <- uniroot(fb, interval = c(1, q))$root
     
+    # if (sum(lambda^2) == 0) b0 <- q
+    # else b0 <- uniroot(fb, interval = c(1, q))$root
+    
+    if (sum(lambda^2) == 0) {
+        b0 <- q
+    } else {
+        tryCatch(
+            expr = {
+                b0 <- uniroot(fb, interval = c(1, q))$root
+            },
+            error = function(e) {
+                message("Error in uniroot with lambda = ", paste(lambda, collapse = ", "))
+                stop(e)
+            }
+        )
+    }
+    
+        
     return(b0)
 }
 
@@ -37,7 +53,8 @@ rvB <- function(A, opt_upper = 1e5) {
     
     # Preparation for Line 2
     mat2 <- diag(gamm, nrow = N) - mat1 
-    betas <- eigen(mat2)$values
+    # TODO I should validate, at least mathematically, that these eigenvalues must be real
+    betas <- Re(eigen(mat2)$values)
     
     # TODO can I solve this in another way?
     # TODO I should perform some sort of check that determines where I need to use a larger "upper" value
@@ -57,7 +74,7 @@ rvB <- function(A, opt_upper = 1e5) {
     u_draw <- 1
     while(u_draw >= acc_prob) {
         # Line 6: sample y from a Normal dist.
-        y <- rmvnorm(1, sigma = solve(Om))
+        y <- mvtnorm::rmvnorm(1, sigma = solve(Om))
         # Line 7: normalize y
         u <- t(y) / sqrt(sum(y^2))
         # Line 8: compute the ACG density value at u
@@ -108,7 +125,8 @@ rcvb <- function(A, opt_upper = 1e5) {
 # is orthogonal to the rest of the columns in U.
 rcvb_LN <- function(U, j, A) {
     
-    LN <- NullC(U[, -j])
+    # LN <- NullC(U[, -j])
+    LN <- MASS::Null(U[, -j])
     # this value is actually not used later
     u <- Conj(t(LN)) %*% U[, -j]
     
@@ -293,12 +311,23 @@ rcBingUP <- function(A, B) {
     return(list(X = X, nrej = nrej))
 }
 
-my.rCbing.Op <- function(A,B, istatus = 0) {
+# Input:
+
+# A, Hermitian matrix: note that if A is the result of a matrix multiplication, it may have slightly non-real diagonal entries (which would make it technically non-Hermitian). One way to correct this is to replace diag(A) with Re(diag(A)) before using it as an input. In the future, it may be desirable to handle this automatically within the function.
+my.rCbing.Op <- function(A,B, istatus = 0, Imtol = .Machine$double.eps*2) {
     #simulate from the bingham distribution on O(p) 
     #having density proportional to etr(B t(U)%*%A%*%U ) 
     #using the rejection sampler described in Hoff(2009)
     #this only works for small matrices, otherwise the sampler
     #will reject too frequently
+    
+    if (all(Im(diag(A)) <= Imtol)) {
+        diag(A) <- Re(diag(A))
+    } else {
+        stop(paste0("A should be Hermitian, but has complex diagonal entries: "),
+             paste(diag(A), collapse = ", "))
+    }
+        
     
     ### assumes B is a diagonal matrix with *decreasing* entries 
     
@@ -351,7 +380,10 @@ my.rCbing.Op <- function(A,B, istatus = 0) {
             }
         }
     }
-    if(bmx==bmn) { U<-rustiefel(dim(A)[1],dim(A)[1]) } 
+    if(bmx==bmn) { 
+        # U<-rustiefel(dim(A)[1],dim(A)[1]) 
+        stop("bmx == bmn in my.rCbing.Op")
+        } 
     
     return(list(X=U, nrej = nrej))
 }
@@ -379,8 +411,9 @@ my.rCbing.Op <- function(A,B, istatus = 0) {
 
 # Currently, this function requires that the input X have even dimensions.
 
-rcBingUP_gibbs <- function(X, A, B, istatus = 0) {
+rcBingUP_gibbs <- function(X, A, B, istatus = 0, Imtol = .Machine$double.eps*2) {
     
+    stopifnot("B must be a matrix" = is.matrix(B))
     stopifnot("A and B must have the same dimensions" = all(dim(A) == dim(B)))
     stopifnot("A and B must be square" = dim(A)[1] == dim(A)[2])
     
@@ -397,16 +430,17 @@ rcBingUP_gibbs <- function(X, A, B, istatus = 0) {
         ijs <- scols[c(sstep*2 - 1, sstep*2)] |> sort()
         
         # find an orthonormal basis for the left null space of X without ijs 
-        N <- NullC(X[, -ijs])
+        # N <- NullC(X[, -ijs])
+        N <- MASS::Null(X[, -ijs])
         
         # transform the original parameters
         newA <- t(Conj(N)) %*% A %*% N
-        newB <- diag(B[ijs])
+        newB <- B[ijs, ijs]
         
         # sample the 2x2 columns, and transform back into X columns
         # zsamp <- rcBingUP(newA, newB)
         
-        zsamp <- my.rCbing.Op(newA, newB, istatus = istatus)
+        zsamp <- my.rCbing.Op(newA, newB, istatus = istatus, Imtol = Imtol)
         X[, ijs] <- N %*% zsamp$X
     }
     

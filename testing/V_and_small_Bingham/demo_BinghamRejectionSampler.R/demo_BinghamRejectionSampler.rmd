@@ -1,0 +1,706 @@
+---
+title: ""
+subtitle: ""
+author: ""
+date: ""
+header-includes:
+    - \usepackage{amsmath}
+    # - \pagenumbering{gobble}
+output:
+    pdf_document:
+        highlight: default
+        includes: 
+            in_header: "linebreak.tex"
+    html_document: default
+---
+
+\setcounter{page}{1}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, fig.height = 4, echo = FALSE,
+                      cache = FALSE)
+# setwd("G:/My Drive/STAT626/HW06")
+
+# declare libraries
+# library(ggplot2)
+
+# rm(list = ls())
+
+source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/functions/rcgb.R")
+source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/functions/generatedata.R")
+source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/testing/scratch_rcomplex_wishart.R")
+```
+
+# Overview
+
+I will discuss the performance of a rejection sampler for small complex Bingham matrices. In particular, I confirm that a statistic of the samples matches a known property of the distribution, and show how the acceptance rate varies. Overall, I believe the function produces *correct samples* for each of the parameters tested. However, the *acceptance rate can be quite different* depending on the parameters.
+
+# Rejection sampler
+
+We wish to generate samples $U \sim CB(G, H)$, where $G$ is $p \times p$ Hermitian positive definite, and $H$ is $p \times p$ diagonal with real entries. The method is based on that described in supplemental materials to Hoff's 2009 Simulation paper. Very roughly:
+
+- generate $W \sim CW(\nu, S)$
+    * where $S = (\delta I_p - G )^{-1}$
+    * $\delta$ is chosen to make $S$ positive definite
+    * and $\nu$ can be chosen
+- let $W = ULU^H$
+- determine whether to accept $U$ as a sample
+    * density of W can be written as $p(W) = p(U, L) = p(U | L) p(L)$
+    * $U | L$ has a $CB(G, L)$ distribution
+    * leads to a convenient expression for acceptance ratio, $r$
+    
+In practice, I have implemented this sampler in (almost) exactly the same way as the `rbing.Op` function in Hoff's `rstiefel` package. 
+
+```{r check-bing-avg-func, include=FALSE}
+# "average covariance eigenvector" demonstration function
+
+check_cbing_avg <- function(G, H, nreps, istatus, sample_print) {
+    P <- nrow(G)
+    
+    Us <- array(NA, c(P, P, nreps))
+    nrejs <- rep(NA, nreps)
+    
+    for (i in 1:nreps) {
+        if (sample_print) {
+            if (i%% sample_print == 0) print(i)
+        }
+        
+        i_sample <- my.rCbing.Op(G, H)
+        nrejs[i] <- i_sample$nrej
+        Us[, , i] <- i_sample$X
+    }
+    
+    return(list(Us = Us, nrejs = nrejs))
+}
+
+avg_from_Cov <- function(Us, C) {
+    P <- dim(Us)[1]
+    nreps <- dim(Us)[3]
+    
+    Covs <- array(NA, c(P, P, nreps))
+    
+    for (i in 1:nreps) {
+        Covs[, , i] <- Us[, , i] %*% C %*% t(Conj(Us[, , i]))
+    }
+    
+    meanCovs <- apply(Covs, c(1, 2), mean)
+    
+    return(eigen(meanCovs)$vectors)
+}
+
+```
+
+# How to compare samples to properties of known distribution
+
+We wish to generate many samples from a known CB distribution, and determine if the samples are indeed from that distribution. I have not been able to find many useful results for known properties of the (complex) matrix Bingham distribution, so I do not have convenient known quantities to test like the mean, distributions of eigenvalues, etc.
+
+In Hoff's 2009 Eigenmodel paper, he notes that, when the entries of $A$ and $H$ are distinct, the $CGB(A, H, V)$ distribution has modes at $V$ and $\{VS\}$, where $S$ is any matrix that flips the sign of one or more columns of $V$. The $CGB(A, H, V)$ distribution is exactly the $CB(G, H) = CB(VAV^H, H)$ distribution that we want to sample. 
+
+I propose comparing the "average" columns sampled to the parameter $V$. However, since the distribution is antipodally symmetric (the columns represent axes), taking the simple average of the columns averages out to 0. Instead, I will adapt an idea from Hoff 2009 for a posterior point estimate of a matrix parameter which has a Bingham full conditional distribution. In Section 4, he proposes "a posterior point estimate of $V$ can be obtained from the eigenvector matrix of the posterior mean of $VAV^T$, obtained by averaging across samples of the Markov chain".
+
+Thus, for a sample $U_i$, I propose calculating $\Sigma_i = U_i C U_i^H$ for an arbitrary diagonal matrix $C$ with positive real diagonal entries. The matrix $C$ is included since otherwise, $U_i U_i^H = I_p$ because $U_i$ is unitary. Then, find the sample average $\widehat \Sigma$, and compare the eigenvectors of $\widehat \Sigma$ to $V$.
+
+# Simulations of different distributions
+
+Goal:
+
+- Choose fixed G, H parameters for CB(G, H)
+- Generate multiple samples $U \sim CB(G, H)$
+- Confirm a summary of the sample matches a known characteristic of the distribution
+
+Choose the $G$ and $H$ parameters in the following way. Let $G = VAV^H$, and choose some fixed $V$. Then, we will vary the eigenvalues in $A$ and the entries of $H$. Specifically, for each we will consider values that are either (small or large) and (close or far). For example, values 4 and 1 are small and close, while 10040 and 10001 are large and far. There are thus four settings each for $G$ and $H$, making 16 total combinations to compare. 
+
+For the examples and simulations, I let 
+$V = 2^{-1/2}\begin{pmatrix} 1 & -1 \\ 1 & 1 \end{pmatrix}$. 
+
+Overall, I believe the function produces *correct samples* for each of the parameters tested. However, the *acceptance rate can be quite different* -- if the $A$ or $H$ entries are far apart, more rejections are needed, on average.
+
+## One example
+
+Below, we show the performance of letting $diag(A) = diag(H) = (4, 1)$. 250 samples are generated from the CB(G, H) distribution. 
+```{r ex-dist-good-rejs}
+# Demo of "average" samples from CB(G, H), compared to true eigenvectors of G
+
+# Settings: the number of rejections is small for this combination
+# - Gvals small, close
+# - Hvals small, close
+
+# create G matrix parameter
+Gvals <- c(4, 1)
+Gvecs <- 1/sqrt(2) * matrix(c(1, 1, -1, 1), ncol = 2)
+G <- Gvecs %*% diag(Gvals) %*% t(Conj(Gvecs))
+
+# create H
+Hvals <- c(4, 1)
+H <- diag(Hvals)
+
+nreps <- 250
+
+# get multiple samples and counts of rejections
+avgs1 <- check_cbing_avg(G, H, nreps, istatus = 0, sample_print = 0)
+
+# print various summaries and comparisons
+print("compare the estimate with some different C matrices, to confirm they are the same")
+(avgU <- avg_from_Cov(avgs1$Us, diag(c(2, 1))))
+avg_from_Cov(avgs1$Us, diag(c(10, 3)))
+avg_from_Cov(avgs1$Us, diag(c(5000, 2)))
+
+print("compare to the known eigenvectors of G")
+Gvecs
+
+print("compute distance between estimated columns and true columns.") 
+print("Close to 2 or 0 means the estimated column is close to the true axis.")
+Re(sqrt(diag(t(Conj(avgU - Gvecs)) %*% (avgU - Gvecs))))
+
+print("show a summary of how many rejections occurred for each sample")
+summary(avgs1$nrejs)
+quantile(avgs1$nrejs, c(.95, .99))
+```
+
+## Another example
+
+Next, an example is shown with large and far $G$ eigenvalues, and the same $H$ values as the previous example (small and close). That is, $diag(A) = (10040, 10001)$ and $diag(H) = (4, 1)$. 
+
+```{r ex-dist-bad-rejs}
+# Demo of "average" samples from CB(G, H), compared to true eigenvectors of G
+
+# Settings: the number of rejections is larger for this combination
+# - Gvals large, far
+# - Hvals small, close
+
+# these eigenvectors are further apart than the previous example
+Gvals <- c(10040, 10001)
+Gvecs <- 1/sqrt(2) * matrix(c(1, 1, -1, 1), ncol = 2)
+G <- Gvecs %*% diag(Gvals) %*% t(Conj(Gvecs))
+
+Hvals <- c(4, 1)
+H <- diag(Hvals)
+
+avgs1 <- check_cbing_avg(G, H, nreps, istatus = 0, sample_print = 0)
+
+print("Estimate of columns")
+(avgU <- avg_from_Cov(avgs1$Us, diag(c(2, 1))))
+print("compare to the known eigenvectors of G")
+Gvecs
+
+print("compute distance between estimated columns and true columns.") 
+print("Close to 2 or 0 means the estimated column is close to the true axis.")
+Re(sqrt(diag(t(Conj(avgU - Gvecs)) %*% (avgU - Gvecs))))
+
+print("show a summary of how many rejections occurred for each sample")
+summary(avgs1$nrejs)
+quantile(avgs1$nrejs, c(.95, .99))
+```
+
+## Further simulations
+
+```{r sim-combos-dist-est, cache=TRUE}
+# this cell runs a comparison of Bingham matrix estimates for different
+# combinations of parameter eigenvalues. There are 16 combinations in total.
+
+# number of repetitions to do per matrix
+# nreps <- 500
+# # store the distance between estimated columns, for each combination
+# est_dist <- matrix(NA, 16, 2)
+# # store the numbers of rejections for each iteration, for each combination
+# nrejs_per <- matrix(NA, 16, nreps)
+# 
+# # the G and H parameter eigen/diagonal values
+# Gvals_arr <- Hvals_arr <- 
+#     matrix(c(4, 40, 10004, 10040,
+#              1, 1, 10001, 10001), nrow = 2, byrow = TRUE)
+# 
+# for (Gi in 1:4) {
+#     # calculate G matrix with the current Gvals
+#     G <- Gvecs %*% diag(Gvals_arr[, Gi]) %*% t(Conj(Gvecs))
+# 
+#     for (Hi in 1:4) {
+#         print(c(Gi, Hi))
+#         # make H matrix with current Hvals
+#         H <- diag(Hvals_arr[, Hi])
+# 
+#         # perform the simulation
+#         avgs1 <- check_cbing_avg(G, H, nreps = nreps, 
+#                                  istatus = 0, sample_print = 100)
+#         # estimate the matrices as eigenvectors of an "average covariance" matrix
+#         (avgU <- avg_from_Cov(avgs1$Us, diag(c(2, 1))))
+#         
+#         # how far apart are the estimated columns from the true eigenvectors?
+#         est_dist[4*(Gi-1) + Hi, ] <- 
+#             Re(sqrt(diag(t(Conj(avgU - Gvecs)) %*% (avgU - Gvecs))))
+#         # store the number of rejections for each sample
+#         nrejs_per[4*(Gi-1) + Hi, ] <- avgs1$nrejs
+#     }
+# }
+```
+
+This method of sampling was repeated for all 16 combinations of $A$ and $H$ entries. In the simulations below, 500 samples were drawn from each distribution. In all cases, the estimated columns are close to the true eigenvectors of $G$ (since the distance between the estimated columns and the true axes are all close to 2 or 0, as shown below).
+
+```{r prep-sim-tables}
+# save(list = c("est_dist", "nrejs_per", "nreps", "Gvals_arr", "Hvals_arr"), 
+#      file = "Bingham_sims_500.Rdata")
+# 
+load("Bingham_sims_500.Rdata")
+
+HGval_rows <- expand.grid(Hr = 1:4, Gr = 1:4)
+
+HG_settings <- cbind(t(Gvals_arr)[HGval_rows$Gr, ],
+                     t(Hvals_arr)[HGval_rows$Hr, ])
+colnames(HG_settings) <- c("G1", "G2", "H1", "H2")
+
+# distance between average columns and true vectors
+# close to 2 means the average vector was pointing in the opposite direction
+# as the true vector, but is otherwise close to the same axis.
+
+# close to 0 means the average vector was pointing in nearly the same direction as the true vector
+est_dist
+```
+
+The table below summarizes the number of rejections needed for the different parameter combinations. In general, if the eigenvalues of $G$ and entries of $H$ are close, then the sampler is fairly efficient (acceptance rate $\approx 50\%$). If one or both sets of values are far apart, then the acceptance rate becomes quite poor (about 1/20 or 1/250).
+
+```{r summary-nrejs-fixedpars}
+summ_nrejs_dist <- as.data.frame(
+    cbind(
+        HG_settings,
+        t(apply(nrejs_per, 1, quantile, probs = c(0, .25, .5, .75, .95, .99, 1))),
+        means = rowMeans(nrejs_per)
+        ))
+
+knitr::kable(summ_nrejs_dist, 
+             caption = "Percentiles and mean numbers of rejections for different eigenvalue combinations")
+```
+
+## An example with complex eigenvectors
+
+The previous example had real parameters to the CB distribution. In this example, we use $G = VAV^H$ with complex eigenvectors making up $V$. This will help to test whether the distribution is off by, say, a complex conjugate somewhere. I let $A = H = diag(4, 1)$. The eigenvectors $V$ are randomly generated by taking the eigenvectors from a complex Wishart matrix. 1000 samples are generated from the $CB(VAV^H, H)$ distribution. I compare the average estimated eigenvectors to $V$ and the distances of those columns from the true axes represented by $V$, and check the number of rejections. 
+
+The estimated eigenvectors are close to the columns of $V$, and the number of rejections is similar to the first example in this section (acceptance rate $\approx 50\%$ with close eigenvalue/diagonal entries).
+
+```{r ex-complex-eigenvectors}
+# generate a G with complex eigenvectors, and small, close eigenvalues
+set.seed(4042025)
+Ginit <- rcomplex_wishart(3, 2, diag(2))
+Gvecs <- eigen(Ginit)$vectors
+Gvals <- c(4, 1)
+G <- Gvecs %*% diag(Gvals) %*% t(Conj(Gvecs))
+
+print("The eigendecomposition of G")
+eigen(G)
+
+Hvals <- c(4, 1)
+H <- diag(Hvals)
+
+nreps <- 1000
+
+# repeatedly sample from this distribution
+avgs1 <- check_cbing_avg(G, H, nreps, istatus = 0, sample_print = 0)
+
+print("Estimate of columns")
+(avgU <- avg_from_Cov(avgs1$Us, diag(c(2, 1))))
+
+print("compare to the known eigenvectors of G")
+Gvecs
+
+print("compute distance between estimated columns and true columns.") 
+print("Close to 2 or 0 means the estimated column is close to the true axis.")
+Re(sqrt(diag(t(Conj(avgU - Gvecs)) %*% (avgU - Gvecs))))
+
+print("show a summary of how many rejections occurred for each sample")
+summary(avgs1$nrejs)
+quantile(avgs1$nrejs, c(.95, .99))
+```
+
+# Number of rejections for randomized parameters
+
+In the following examples, I investigate the amount of rejections for samples with different parameters, to understand if the previous results were just due to lucky choices. In the first example, the eigenvalues of $G$ and the entries of $H$ are $[7 + Unif(-1, 1), 3 + Unif(-1, 1)]$. This is closest to the 1st combination of settings in Table 1. The eigenvectors of $G$ are the eigenvectors from a $CW(3, I_2)$ random matrix. 10,000 repetitions are performed. The mean number of rejections is 1.844 (compared to 1.052 earlier), and both simulations had a median of 1 rejection. Thus, the performance is somewhat worse than the earlier simulation, although not drastically different.
+
+```{r nrejs-random-pars-good, cache=TRUE}
+# find the number of rejections needed to sample from CB distributions with
+# different parameters. The goal is to find if the number of rejections is
+# drastically different than previous examples (i.e. if the previous parameters
+# were lucky choices).
+
+# in this example, the eigenvalues of G are close, which should lead to smaller
+# numbers of rejections.
+
+nreps <- 10000
+nrejs <- rep(NA, nreps)
+
+set.seed(5042025)
+for (i in 1:nreps) {
+    
+    Ginit <- rcomplex_wishart(3, 2, diag(2))
+    Gvecs <- eigen(Ginit)$vectors
+    Gvals <- c(7, 3) + runif(2, -1, 1)
+    G <- Gvecs %*% diag(Gvals) %*% t(Conj(Gvecs))
+    diag(G) <- Re(diag(G))
+    
+    Hvals <- c(7, 3) + runif(2, -1, 1)
+    H <- diag(Hvals)
+    
+    Usamp <- my.rCbing.Op(G, H)
+    
+    nrejs[i] <- Usamp$nrej
+}
+
+print("Summary of rejections for close G eigenvalues")
+summary(nrejs)
+quantile(nrejs, c(.95, .99))
+```
+
+Next, we use eigenvalues for $G$ that are further apart. Now, the eigenvalues of $G$ are $[60 + Unif(-10, 10), 21 + Unif(-10, 10)]$. The eigenvectors of $G$ and the entries of $H$ are randomly generated in the same way as the previous example. This is closest to the 5th combination of settings in Table 1. 1000 repetitions were performed (due to this simulation taking longer). The mean number of rejections is 25.23 (compared to 19.852 in the earlier simulations). The median is 17 (compared to 13 earlier). Similar to the previous example, the performance is somewhat worse than the previous simulations, although not drastically different.
+
+```{r nrejs-random-pars-bad, cache=TRUE}
+nreps <- 1000
+nrejs <- rep(NA, nreps)
+
+# in this example, the eigenvalues of G are far, which should lead to larger
+# numbers of rejections.
+
+set.seed(5042025)
+for (i in 1:nreps) {
+    
+    Ginit <- rcomplex_wishart(3, 2, diag(2))
+    Gvecs <- eigen(Ginit)$vectors
+    Gvals <- c(60, 21) + runif(2, -10, 10)
+    G <- Gvecs %*% diag(Gvals) %*% t(Conj(Gvecs))
+    diag(G) <- Re(diag(G))
+    
+    Hvals <- c(7, 3) + runif(2, -1, 1)
+    H <- diag(Hvals)
+    
+    Usamp <- my.rCbing.Op(G, H)
+    
+    nrejs[i] <- Usamp$nrej
+}
+
+print("Summary of rejections for far G eigenvalues")
+summary(nrejs)
+quantile(nrejs, c(.95, .99))
+```
+
+# Sampling 3x3 matrices
+
+Now, I briefly demonstrate the rejection sampler for $3 \times 3$ matrices. The eigenvectors of $G$ are randomly generated from eigenvectors of a $CW(4, I_3)$ matrix. The eigenvalues of $G$ and diagonal entries of $H$ are $(7, 4, 1)$. 100 repetitions are performed. The "average" columns are close to the true axes. However, the number of rejections is high (mean = 32.22).
+
+```{r demo-3x3-close, cache=TRUE}
+# small and close entries for H and eigenvalues of G are tested for 3x3 samples.
+
+# create G matrix parameter
+set.seed(5042025)
+Ginit <- rcomplex_wishart(4, 3, diag(3))
+Gvecs <- eigen(Ginit)$vectors
+Gvals <- c(7, 4, 1)
+G <- Gvecs %*% diag(Gvals) %*% t(Conj(Gvecs))
+eigen(G)
+
+# create H
+Hvals <- c(7, 4, 1)
+H <- diag(Hvals)
+
+nreps <- 100
+
+# get multiple samples and counts of rejections
+avgs1 <- check_cbing_avg(G, H, nreps, istatus = 0, sample_print = 0)
+
+# print various summaries and comparisons
+print("compare the estimate with some different C matrices, to confirm they are the same")
+(avgU <- avg_from_Cov(avgs1$Us, diag(c(3, 2, 1))))
+avg_from_Cov(avgs1$Us, diag(c(17, 10, 3)))
+avg_from_Cov(avgs1$Us, diag(c(10000, 5000, 2)))
+
+print("compare to the known eigenvectors of G")
+Gvecs
+
+print("compute distance between estimated columns and true columns.") 
+print("Close to 2 or 0 means the estimated column is close to the true axis.")
+Re(sqrt(diag(t(Conj(avgU - Gvecs)) %*% (avgU - Gvecs))))
+
+print("show a summary of how many rejections occurred for each sample")
+summary(avgs1$nrejs)
+quantile(avgs1$nrejs, c(.95, .99))
+```
+
+When one of the eigenvalues for $G$ is farther, i.e. (20, 4, 1), the rejection sampler takes even longer (mean number of rejections is 594.9).
+
+```{r demo-3x3-far, cache=TRUE}
+# small and far entries for H and eigenvalues of G are tested for 3x3 samples.
+
+# create G matrix parameter
+set.seed(5042025)
+Ginit <- rcomplex_wishart(4, 3, diag(3))
+Gvecs <- eigen(Ginit)$vectors
+Gvals <- c(20, 4, 1)
+G <- Gvecs %*% diag(Gvals) %*% t(Conj(Gvecs))
+eigen(G)
+
+# create H
+Hvals <- c(7, 4, 1)
+H <- diag(Hvals)
+
+nreps <- 100
+
+# get multiple samples and counts of rejections
+avgs1 <- check_cbing_avg(G, H, nreps, istatus = 0, sample_print = 0)
+
+# print various summaries and comparisons
+print("compare the estimate with some different C matrices, to confirm they are the same")
+(avgU <- avg_from_Cov(avgs1$Us, diag(c(3, 2, 1))))
+avg_from_Cov(avgs1$Us, diag(c(17, 10, 3)))
+avg_from_Cov(avgs1$Us, diag(c(10000, 5000, 2)))
+
+print("compare to the known eigenvectors of G")
+Gvecs
+
+print("compute distance between estimated columns and true columns.") 
+print("Close to 2 or 0 means the estimated column is close to the true axis.")
+Re(sqrt(diag(t(Conj(avgU - Gvecs)) %*% (avgU - Gvecs))))
+
+print("show a summary of how many rejections occurred for each sample")
+summary(avgs1$nrejs)
+quantile(avgs1$nrejs, c(.95, .99))
+```
+# Computation time
+
+This demonstrates the order of run times for sampling different size matrices with different parameters.
+
+```{r comp-time, cache=TRUE}
+# this demonstrates the order of run times for sampling different size matrices
+# with different parameters
+
+# 2x2
+set.seed(5042025)
+# randomized eigenvectors
+Ginit <- rcomplex_wishart(3, 2, diag(2))
+Gvecs <- eigen(Ginit)$vectors
+
+# G matrices with close and far eigenvalues
+G2c <- Gvecs %*% diag(c(7, 3)) %*% t(Conj(Gvecs))
+diag(G2c) <- Re(diag(G2c))
+
+G2f <- Gvecs %*% diag(c(60, 21)) %*% t(Conj(Gvecs))
+diag(G2f) <- Re(diag(G2f))
+
+H2 <- diag(c(7, 3))
+
+# 3x3
+set.seed(5042025)
+# randomized eigenvectors
+G3init <- rcomplex_wishart(4, 3, diag(3))
+G3vecs <- eigen(G3init)$vectors
+
+# G matrices with close and far eigenvalues
+G3c <- G3vecs %*% diag(c(7, 4, 1)) %*% t(Conj(G3vecs))
+diag(G3c) <- Re(diag(G3c))
+
+G3f <- G3vecs %*% diag(c(20, 4, 1)) %*% t(Conj(G3vecs))
+diag(G3f) <- Re(diag(G3f))
+
+H3 <- diag(c(7, 4, 1))
+
+# run microbenchmark with all the parameter combinations
+microbenchmark::microbenchmark(
+    my.rCbing.Op(G2c, H2),
+    my.rCbing.Op(G2f, H2),
+    my.rCbing.Op(G3c, H3),
+    my.rCbing.Op(G3f, H3)
+)
+```
+
+# Comparison to sampler for real Bingham matrices
+
+Finally, in this section, I briefly demonstrate the performance of the same technique for real Bingham matrices, using `rbing.Op` from the `rstiefel` package. The samples have "average" columns that are close to the "true" axes. The number of rejections are quite smaller than those for complex matrices. Curiously, the number of rejections seems to decrease for $2 \times 2$ matrices when the parameter eigenvalues are very far apart. The mean number of rejections for a $3 \times 3$ matrix with close eigenvalues is about $3.5$, much smaller than that for complex matrices.
+
+```{r real-functions}
+### 
+rwish<-function(nu,M,cholM=chol(M)) 
+{ 
+    Z<-matrix(rnorm(nu*dim(M)[1]),nrow=nu,ncol=dim(M)[1]) 
+    Y<-Z%*%cholM 
+    t(Y)%*%Y 
+} 
+### 
+
+###
+my.rbing.Op <- function(A,B) {
+        #simulate from the bingham distribution on O(p) 
+        #having density proportional to etr(B t(U)%*%A%*%U ) 
+        #using the rejection sampler described in Hoff(2009)
+        #this only works for small matrices, otherwise the sampler
+        #will reject too frequently
+        
+        ### assumes B is a diagonal matrix with *decreasing* entries 
+        
+        b<-diag(B) ; bmx<-max(b) ; bmn<-min(b)  
+        if(bmx>bmn)
+        { 
+            A<-A*(bmx-bmn) ; b<-(b-bmn)/(bmx -bmn)
+            vlA<-eigen(A)$val  
+            diag(A)<-diag(A)-vlA[1]
+            vlA<-eigen(A)$val  
+            
+            nu<- max(dim(A)[1]+1,round(-vlA[length(vlA)]))
+            del<- nu/2
+            M<- solve( diag(del,nrow=dim(A)[1] ) - A )/2
+            
+            rej<-TRUE
+            cholM<-chol(M)
+            nrej<-0
+            while(rej)
+            {
+                Z<-matrix(rnorm(nu*dim(M)[1]),nrow=nu,ncol=dim(M)[1])
+                Y<-Z%*%cholM ; tmp<-eigen(t(Y)%*%Y)
+                U<-tmp$vec%*%diag((-1)^rbinom(dim(A)[1],1,.5)) ; L<-diag(tmp$val)
+                D<-diag(b)-L
+                lrr<- sum(diag(( D%*%t(U)%*%A%*%U)) ) - sum( -sort(diag(-D))*vlA)
+                rej<- ( log(runif(1))> lrr )
+                # nrej<-nrej+1
+                nrej <- nrej + rej
+            }
+        }
+        if(bmx==bmn) { U<-rustiefel(dim(A)[1],dim(A)[1]) } 
+        return(list(X=U, nrej = nrej))
+    }
+```
+
+## Real 2x2 matrices with close G eigenvalues
+
+```{r real-2x2-close}
+
+# create G matrix parameter
+Gvals <- c(4, 1)
+Gvecs <- 1/sqrt(2) * matrix(c(1, 1, -1, 1), ncol = 2)
+G <- Gvecs %*% diag(Gvals) %*% t(Conj(Gvecs))
+
+# create H
+Hvals <- c(4, 1)
+H <- diag(Hvals)
+
+nreps <- 1000
+
+Us <- array(NA, c(2, 2, nreps))
+nrejs <- rep(NA, nreps)
+
+set.seed(5042025)
+for (i in 1:nreps) {
+    Usamp <- my.rbing.Op(G, H)
+    Us[, , i] <- Usamp$X
+    nrejs[i] <- Usamp$nrej
+}
+
+# print various summaries and comparisons
+print("compare the estimate with some different C matrices, to confirm they are the same")
+(avgU <- avg_from_Cov(Us, diag(c(2, 1))))
+avg_from_Cov(Us, diag(c(10, 3)))
+avg_from_Cov(Us, diag(c(5000, 2)))
+
+print("compare to the known eigenvectors of G")
+Gvecs
+
+print("compute distance between estimated columns and true columns.")
+print("Close to 2 or 0 means the estimated column is close to the true axis.")
+Re(sqrt(diag(t(Conj(avgU - Gvecs)) %*% (avgU - Gvecs))))
+# 
+# print("show a summary of how many rejections occurred for each sample")
+summary(nrejs)
+quantile(nrejs, c(.95, .99))
+
+```
+
+## Real 2x2 matrices with far G eigenvalues
+
+```{r real-2x2-far}
+# create G matrix parameter
+Gvals <- c(400, 1)
+Gvecs <- 1/sqrt(2) * matrix(c(1, 1, -1, 1), ncol = 2)
+G <- Gvecs %*% diag(Gvals) %*% t(Conj(Gvecs))
+
+# create H
+Hvals <- c(4, 1)
+H <- diag(Hvals)
+
+nreps <- 1000
+
+Us <- array(NA, c(2, 2, nreps))
+nrejs <- rep(NA, nreps)
+
+set.seed(50420251)
+for (i in 1:nreps) {
+    Usamp <- my.rbing.Op(G, H)
+    Us[, , i] <- Usamp$X
+    nrejs[i] <- Usamp$nrej
+}
+
+# print various summaries and comparisons
+print("compare the estimate with some different C matrices, to confirm they are the same")
+(avgU <- avg_from_Cov(Us, diag(c(2, 1))))
+avg_from_Cov(Us, diag(c(10, 3)))
+avg_from_Cov(Us, diag(c(5000, 2)))
+
+print("compare to the known eigenvectors of G")
+Gvecs
+
+print("compute distance between estimated columns and true columns.")
+print("Close to 2 or 0 means the estimated column is close to the true axis.")
+Re(sqrt(diag(t(Conj(avgU - Gvecs)) %*% (avgU - Gvecs))))
+# 
+# print("show a summary of how many rejections occurred for each sample")
+summary(nrejs)
+quantile(nrejs, c(.95, .99))
+
+```
+
+## Real 3x3 matrices with close G eigenvalues
+
+```{r real-3x3-close}
+# create G matrix parameter
+set.seed(50420252)
+Gvecs <- eigen(rwish(4, diag(3)))$vectors
+Gvals <- c(7, 4, 1)
+G <- Gvecs %*% diag(Gvals) %*% t(Conj(Gvecs))
+eigen(G)
+
+# create H
+Hvals <- c(7, 4, 1)
+H <- diag(Hvals)
+
+nreps <- 1000
+
+Us <- array(NA, c(3, 3, nreps))
+nrejs <- rep(NA, nreps)
+
+for (i in 1:nreps) {
+    Usamp <- my.rbing.Op(G, H)
+    Us[, , i] <- Usamp$X
+    nrejs[i] <- Usamp$nrej
+}
+
+# print various summaries and comparisons
+print("Estimate from sampled matrices")
+(avgU <- avg_from_Cov(Us, diag(3:1)))
+
+print("compare to the known eigenvectors of G")
+Gvecs
+
+print("compute distance between estimated columns and true columns.")
+print("Close to 2 or 0 means the estimated column is close to the true axis.")
+Re(sqrt(diag(t(Conj(avgU - Gvecs)) %*% (avgU - Gvecs))))
+# 
+# print("show a summary of how many rejections occurred for each sample")
+summary(nrejs)
+quantile(nrejs, c(.95, .99))
+```
+
+
+\newpage
+
+# Appendix
+
+```{r echo=TRUE}
+#####
+# Lambdak_gibbs_densCovar
+#####
+
+# Lambdak_gibbs_densCovar
+```
+

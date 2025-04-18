@@ -1,6 +1,6 @@
 # sampling for V matrices
 
-# Assuming that V has positive dimensions
+# Assuming that V has even dimensions
 
 # library(cmvnorm)
 library(rstiefel)
@@ -17,7 +17,7 @@ t(Conj(y)) %*% x
 
 # begin sampling
 
-P <- 4
+P <- 8
 
 set.seed(9032025)
 Av <- runitary(P, P)
@@ -49,25 +49,29 @@ Re(ur %*% newX)
 sign(Re(ur %*% newX))
 
 # sample an X many times
-gibbsIts <- 2000
+gibbsIts <- 2500
 Xs <- array(NA, c(P, P, gibbsIts))
 flipped_Xs <- array(NA, c(P, P, gibbsIts))
 # array to hold some projection matrices
 projs <- array(NA, c(P, P, gibbsIts))
+Covs <- array(NA, c(P, P, gibbsIts))
 
 set.seed(25032025)
 # generate a random initial matrix, X, which should have orthonormal columns
 Xs[, , 1] <- (rcomplex_wishart(P, P, diag(P)) |> eigen())$vector
 for (i in 2:gibbsIts) {
-    if (i %% 5 == 0) print(i)
+    if (i %% 100 == 0) print(i)
     
-    X <- rcBingUP_gibbs(Xs[, , i-1], A, B, istatus = 100)
+    X <- rcBingUP_gibbs(Xs[, , i-1], A, B, istatus = 0, 
+                        Imtol = 10^ceiling(log10(.Machine$double.eps)))
     Xs[, , i] <- X
     
     projs[, , i] <- X[, 1:(P-1)] %*% t(Conj(X[, 1:(P-1)]))
     # flipped_Xs
     colmod <- sign(Re(ur %*% X))
     flipped_Xs[, , i] <- t(t(X) * c(colmod))
+    
+    Covs[, , i] <- X %*% diag(P:1) %*% t(Conj(X))
     
     # colmod <- sign(t(ur) %*% U)
     # U <- t(t(U) * c(colmod))
@@ -83,5 +87,12 @@ apply(projs[, , (gibbsIts/2):gibbsIts], c(1, 2), mean)[, 3]
 
 (meanflipped <- apply(flipped_Xs[, , (gibbsIts/2):gibbsIts], c(1, 2), mean))
 eigen(A)
+
+# I think this is the best to compare - "average" eigenvectors
+avgCovs <- eigen(apply(Covs[, , (gibbsIts/2):gibbsIts], c(1, 2), mean))$vectors
+Avecs <- eigen(A)$vectors
+
+coli <- 4
+cbind(avgCovs[, coli], Avecs[, coli])
 
 Re(diag(t(Conj(meanflipped)) %*% meanflipped))
