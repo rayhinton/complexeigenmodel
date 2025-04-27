@@ -5,42 +5,39 @@ source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmod
 
 P <- 16
 
-# problem with checking matrix dimensions
-
 set.seed(18042025)
 Gvecs <- matrix(rnorm(P*P) + rnorm(P*P)*1i, ncol = P) |> qr() |> qr.Q()
 
+# try different G parameters, with large eigenvalues, implicit or explicit identity 
 Gd <- Gvecs %*% (100*diag(P:1)) %*% t(Conj(Gvecs))
 Gnd <- Gvecs %*% t(Conj(Gvecs))
 G_I_nd <- Gvecs %*% diag(P) %*% t(Conj(Gvecs))
 
+# show the diagonal entries - do they appear complex?
 diag(Gd)
 diag(Gnd)
 diag(G_I_nd)
 
+# test Hermitianity with R function
 isSymmetric(Gd)
 isSymmetric(Gnd)
 isSymmetric(G_I_nd)
 
+# see if the eigenvalues are complex
 eigen(Gd)$values
 eigen(Gnd)$values
 eigen(G_I_nd)$values
 
-# problem with checking matrix dimensions
-# from the documentation on all(): 
-# That all(logical(0)) is true is a useful convention: it ensures that...
-dim(Gd) == dim(P:1)
-all(dim(Gd) == dim(P:1))
-
+# an initial unitary matrix for the sampler
 X <- matrix(rnorm(P*P), ncol = P) |> qr() |> qr.Q()
 
-# try drawing a sample
+# H parameter
 H <- diag(P:1 + runif(P))
 
-# rcBingUP_gibbs(Xs[, , i-1], A, B, istatus = 0, 
-#                Imtol = 10^ceiling(log10(.Machine$double.eps)))
-
+# returns an error
 rcBingUP_gibbs(X, Gd, H, Imtol = 100*.Machine$double.eps)
+# no error with a higher tolerance
+rcBingUP_gibbs(X, Gd, H, Imtol = 1000*.Machine$double.eps)
 rcBingUP_gibbs(X, Gnd, H)
 
                

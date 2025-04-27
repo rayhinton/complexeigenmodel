@@ -327,17 +327,16 @@ my.rCbing.Op <- function(A,B, istatus = 0, Imtol = .Machine$double.eps*2) {
         stop(paste0("A should be Hermitian, but has complex diagonal entries: "),
              paste(diag(A), collapse = ", "))
     }
-        
-    
+
     ### assumes B is a diagonal matrix with *decreasing* entries 
     
     b<-diag(B) ; bmx<-max(b) ; bmn<-min(b)  
     if(bmx>bmn)
     { 
         A<-A*(bmx-bmn) ; b<-(b-bmn)/(bmx -bmn)
-        vlA<-eigen(A)$val  
+        vlA<-eigen(A, symmetric = TRUE)$val  
         diag(A)<-diag(A)-vlA[1]
-        vlA<-eigen(A)$val  
+        vlA<-eigen(A, symmetric = TRUE)$val  
         
         # RJH, to prevent nu from being too large when there are negative eigenvalues
         nu_df <- dim(A)[1]+1

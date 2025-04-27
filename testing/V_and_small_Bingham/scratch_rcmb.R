@@ -72,7 +72,7 @@ grass_dist <- function (A, B, r = ncol(A), s_tol = 2*.Machine$double.eps) {
 
 P <- 8
 d <- 4
-its <- 10000
+its <- 2500
 
 set.seed(9042025)
 # generate an 8x8 parameter G
@@ -146,3 +146,6 @@ cbind(
     Vtilde[, coli],
     Vtilde_other[, coli]
 )
+
+# TODO compare the projection matrices too, 
+# either full projection matrices, or those created from a single column at a time

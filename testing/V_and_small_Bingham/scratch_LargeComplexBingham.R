@@ -17,7 +17,7 @@ t(Conj(y)) %*% x
 
 # begin sampling
 
-P <- 8
+P <- 4
 
 set.seed(9032025)
 Av <- runitary(P, P)
@@ -37,7 +37,10 @@ X <- (rcomplex_wishart(P, P, diag(P)) |> eigen())$vector
 t(Conj(X)) %*% X
 
 # sample matrix using the function
-newX <- rcBingUP_gibbs(X, A, B)
+newX <- rcBingUP_gibbs(X, A, diag(B), Imtol = 1000*.Machine$double.eps)
+
+# microbenchmark::microbenchmark(
+#     rcBingUP_gibbs(X, A, diag(B), Imtol = 1000*.Machine$double.eps))
     
 # the matrix is orthonormal
 zapsmall(t(Conj(newX)) %*% newX)
@@ -49,7 +52,7 @@ Re(ur %*% newX)
 sign(Re(ur %*% newX))
 
 # sample an X many times
-gibbsIts <- 2500
+gibbsIts <- 1000
 Xs <- array(NA, c(P, P, gibbsIts))
 flipped_Xs <- array(NA, c(P, P, gibbsIts))
 # array to hold some projection matrices
@@ -62,8 +65,8 @@ Xs[, , 1] <- (rcomplex_wishart(P, P, diag(P)) |> eigen())$vector
 for (i in 2:gibbsIts) {
     if (i %% 100 == 0) print(i)
     
-    X <- rcBingUP_gibbs(Xs[, , i-1], A, B, istatus = 0, 
-                        Imtol = 10^ceiling(log10(.Machine$double.eps)))
+    X <- rcBingUP_gibbs(Xs[, , i-1], A, diag(B), istatus = 0, 
+                        Imtol = 1000*.Machine$double.eps)
     Xs[, , i] <- X
     
     projs[, , i] <- X[, 1:(P-1)] %*% t(Conj(X[, 1:(P-1)]))
@@ -92,7 +95,7 @@ eigen(A)
 avgCovs <- eigen(apply(Covs[, , (gibbsIts/2):gibbsIts], c(1, 2), mean))$vectors
 Avecs <- eigen(A)$vectors
 
-coli <- 4
+coli <- 1
 cbind(avgCovs[, coli], Avecs[, coli])
 
 Re(diag(t(Conj(meanflipped)) %*% meanflipped))

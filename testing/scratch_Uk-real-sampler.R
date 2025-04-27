@@ -5,34 +5,6 @@ source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmod
 source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/functions/generatedata.R")
 source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/functions/matrix_distances.R")
 
-Uk_gibbs_densCovar <- function(data_list, param_list) {
-    VAVH <- param_list$Vs %*% param_list$As %*% t(Conj(param_list$Vs))
-    
-    U_ks <- param_list$U_ks
-    
-    for (k in 1:K) {
-        # Ukc <- Uks[, , k, s-1]
-        Ukc <- param_list$U_ks[, , k]
-        
-        for (j in sample(d)) {
-            # bj <- B[j, j]
-            bj <- param_list$Bs[j, j]
-            # lambdajk <- Lambdaks[j, j, k]
-            lambdajk <- param_list$Lambda_ks[j, j, k]
-            
-            # TODO VAV^H could be calculated beforehand - the value does not change
-            # parj <- bj * VAVH + lambdajk/(1 + lambdajk) * Yks[, , k]
-            parj <- bj * VAVH + lambdajk/(1 + lambdajk) * data_list[[k]]
-            
-            Ukc[, j] <- rcvb_LN(Ukc, j, parj)
-        }
-        
-        U_ks[, , k] <- Ukc
-    }
-    
-    return(U_ks)
-} 
-
 # frob_norm <- function(X) {
 #     return(Re(sum(diag(crossprod(Conj(X), X)))))
 # }
@@ -89,7 +61,7 @@ Uk_gibbs_densCovar <- function(data_list, param_list) {
 K <- 3
 P <- 8
 d <- 4
-its <- 1000
+its <- 25000
 
 nks <- rep(1000, K)
 
@@ -97,8 +69,9 @@ set.seed(12042025)
 
 A <- rgamma(P, 1, 1) |> sort(decreasing = TRUE) |> diag()
 B <- rgamma(d, 1, 1) |> sort(decreasing = TRUE) |> diag()
-V <- runitary(P, P)
-# VAVH <- V %*% A %*% t(Conj(V))
+# V <- runitary(P, P)
+V <- matrix(rnorm(P*P), nrow = P) |> qr() |> qr.Q()
+VAVH <- V %*% A %*% t(V)
 
 # Lambdak <- rgamma(d, 1, 1) |> sort(decreasing = TRUE) |> diag()
 Lambdaks <- array(NA, c(d, d, K))
@@ -117,41 +90,28 @@ Uk0s_evecs <- array(NA, c(P, d, K))
 set.seed(22042025)
 # Yk <- rcomplex_wishart(nk, P, Gammak0)
 Yks <- array(NA, c(P, P, K))
-data_list <- list()
 
 Uks <- array(NA, c(P, d, K, its))
 
 for (k in 1:K) {
     Lambdaks[, , k] <- rgamma(d, 1, 1) |> sort(decreasing = TRUE) |> diag()
     sigmak2s[k] <- rgamma(1, 1, 1)
-    Uk0s[, , k] <- runitary(P, d)
+    # Uk0s[, , k] <- runitary(P, d)
+    Uk0s[, , k] <- matrix(rnorm(P*d), nrow = P) |> qr() |> qr.Q()
     
     Gammak0 <- sigmak2s[k] * 
         ( Uk0s[, , k] %*% Lambdaks[, , k] %*% t(Conj(Uk0s[, , k])) + diag(P) )
     
-    Yks[, , k] <- rcomplex_wishart(nks[k], P, Gammak0)
-    data_list[[k]] <- Yks[, , k]
+    # Yks[, , k] <- rcomplex_wishart(nks[k], P, Gammak0)
+    Yks[, , k] <- rWishart(1, nks[k], Gammak0)[, , 1]
     
     # random initialization for each
     # Uks[, , k, 1] <- runitary(P, d)
-    # ideal initialization at the exact true Uk0
+    # Uks[, , k, 1] <- matrix(rnorm(P*d), nrow = P) |> qr() |> qr.Q()
     Uks[, , k, 1] <- Uk0s[, , k]
     
     Uk0s_evecs[, , k] <- eigen(Uk0s[, , k] %*% Lambdaks[, , k] %*% t(Conj(Uk0s[, , k])) )$vectors[, 1:d]
 }
-
-param_list <- list(
-    P = P,
-    d = d,
-    K = K,
-    n_k = nks,
-    U_ks = Uks[, , , 1],
-    Lambda_ks = Lambdaks,
-    sigma_k2s = sigmak2s,
-    Vs = V,
-    As = A,
-    Bs = B
-)
 
 # initialize a sample for Uk
 set.seed(13042025)
@@ -168,35 +128,25 @@ print(Sys.time())
 for (s in 2:its) {
     if (s %% 500 == 0) print(paste0("s = ", s))
     
-    # VAVH <- param_list$Vs %*% param_list$As %*% t(Conj(param_list$Vs))
-    # 
-    # for (k in 1:K) {
-    #     # Ukc <- Uks[, , k, s-1]
-    #     Ukc <- param_list$U_ks[, , k]
-    #     
-    #     for (j in sample(d)) {
-    #         # bj <- B[j, j]
-    #         bj <- param_list$Bs[j, j]
-    #         # lambdajk <- Lambdaks[j, j, k]
-    #         lambdajk <- param_list$Lambda_ks[j, j, k]
-    #         
-    #         # TODO VAV^H could be calculated beforehand - the value does not change
-    #         # parj <- bj * VAVH + lambdajk/(1 + lambdajk) * Yks[, , k]
-    #         parj <- bj * VAVH + lambdajk/(1 + lambdajk) * data_list[[k]]
-    #         
-    #         Ukc[, j] <- rcvb_LN(Ukc, j, parj)
-    #     }
-    #     
-    #     Uks[, , k, s] <- Ukc
-    #     param_list$U_ks[, , k] <- Ukc
-    #     avgCovs[, , k, s] <- Ukc %*% Lambdaks[, , k] %*% t(Conj(Ukc))
-    #     
-    # }
-    
-    Uks[, , , s] <- Uk_gibbs_densCovar(data_list, param_list)
-    param_list$U_ks <- Uks[, , , s]
     for (k in 1:K) {
-        avgCovs[, , k, s] <- Uks[, , k, s] %*% Lambdaks[, , k] %*% t(Conj(Uks[, , k, s]))
+        Ukc <- Uks[, , k, s-1]
+        
+        for (j in sample(d)) {
+            bj <- B[j, j]
+            lambdajk <- Lambdaks[j, j, k]
+            
+            # TODO VAV^H could be calculated beforehand - the value does not change
+            parj <- bj * VAVH + lambdajk/(1 + lambdajk) * Yks[, , k]
+            LN <- MASS::Null(Ukc[, -j])
+            parjN <- t(LN) %*% parj %*% LN
+            
+            # Ukc[, j] <- rcvb_LN(Ukc, j, parj)
+            Ukc[, j] <- LN %*% rstiefel::rbing.vector.gibbs(parjN, t(LN)%*%Ukc[, j])
+        }
+        
+        Uks[, , k, s] <- Ukc
+        avgCovs[, , k, s] <- Ukc %*% Lambdaks[, , k] %*% t(Conj(Ukc))
+        
     }
 }
 print(Sys.time())

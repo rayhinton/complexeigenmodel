@@ -5,7 +5,10 @@ source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmod
 source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/functions/generatedata.R")
 
 frob_norm <- function(X) {
-    return(Re(sum(diag(crossprod(Conj(X), X)))))
+    outdiag <- Re(diag(crossprod(Conj(X), X)))
+    outlist <- list(fnorm = sum(outdiag), diags = outdiag)
+    
+    return(outlist)
 }
 
 frame_distance <- function(A, B) {
@@ -55,9 +58,12 @@ grass_dist <- function (A, B, r = ncol(A), s_tol = 2*.Machine$double.eps) {
     }
     
     thetas <- acos(sigmas)
-    sub_dist <- sqrt(sum(thetas^2))
+    sq_thetas <- thetas^2
+    sub_dist <- sqrt(sum(sq_thetas))
     
-    return(sub_dist)
+    outlist <- list(sq_thetas = sq_thetas, sub_dist = sub_dist)
+    
+    return(outlist)
 }
 
 # test the distance between two 2D subspaces
@@ -121,3 +127,26 @@ grass_dist(twoD_1, twoD_6)
 
 sum(diag(crossprod(twoD_1 - twoD_5)))
 sum(diag(crossprod(twoD_1 - twoD_5)))
+
+#####
+# 1d projection matrices
+#####
+
+# is the average of projection matrices, a projection matrix?
+
+# show two different semi-orthogonal matrices
+twoD_1
+twoD_2
+
+# compute the projection matrices of their first columns
+A1 <- tcrossprod(twoD_1[, 1])
+A2 <- tcrossprod(twoD_2[, 1])
+
+# take the average of the two different projection matrices
+avgA <- (A1 + A2)/2
+    
+    # is it symmetric? Yes
+isSymmetric(avgA)
+    # is it idempotent? No
+
+avgA %*% avgA

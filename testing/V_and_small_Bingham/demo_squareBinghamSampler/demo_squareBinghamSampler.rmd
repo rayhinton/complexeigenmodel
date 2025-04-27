@@ -1,0 +1,515 @@
+---
+title: ""
+subtitle: ""
+author: ""
+date: ""
+header-includes:
+    - \usepackage{amsmath}
+    # - \pagenumbering{gobble}
+output:
+    pdf_document:
+        highlight: default
+        includes: 
+            in_header: "linebreak.tex"
+    html_document: default
+---
+
+\setcounter{page}{1}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, fig.height = 4, echo = FALSE,
+                      cache = FALSE)
+# setwd("G:/My Drive/STAT626/HW06")
+
+# declare libraries
+# library(ggplot2)
+
+# rm(list = ls())
+
+library(rstiefel)
+library(kableExtra)
+
+source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/functions/rcgb.R")
+source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/functions/generatedata.R")
+source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/testing/scratch_rcomplex_wishart.R")
+source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/functions/matrix_distances.R")
+```
+
+# Overview
+
+
+```{r check-bing-avg-func, include=FALSE}
+# "average covariance eigenvector" demonstration function
+
+check_cbing_avg <- function(G, H, nreps, istatus, sample_print) {
+    P <- nrow(G)
+    
+    Us <- array(NA, c(P, P, nreps))
+    nrejs <- rep(NA, nreps)
+    
+    for (i in 1:nreps) {
+        if (sample_print) {
+            if (i%% sample_print == 0) print(i)
+        }
+        
+        i_sample <- my.rCbing.Op(G, H)
+        nrejs[i] <- i_sample$nrej
+        Us[, , i] <- i_sample$X
+    }
+    
+    return(list(Us = Us, nrejs = nrejs))
+}
+
+avg_from_Cov <- function(Us, C) {
+    P <- dim(Us)[1]
+    nreps <- dim(Us)[3]
+    
+    Covs <- array(NA, c(P, P, nreps))
+    
+    for (i in 1:nreps) {
+        Covs[, , i] <- Us[, , i] %*% C %*% t(Conj(Us[, , i]))
+    }
+    
+    meanCovs <- apply(Covs, c(1, 2), mean)
+    
+    return(eigen(meanCovs)$vectors)
+}
+
+```
+
+```{r echo=TRUE, cache=TRUE}
+# 4x4 real Bingham sampler, with rejection sampler and Gibbs sampler
+
+P <- 4
+its <- 1000
+
+set.seed(17042025)
+
+H <- diag(seq(10, 1, length.out = P))
+
+G <- rWishart(1, P + 1, diag(P))[, , 1]
+A <- diag(eigen(G)$values)
+V <- eigen(G)$vectors
+
+X <- matrix(rnorm(P*P), ncol = P) |> qr() |> qr.Q()
+
+# set up sampling
+Us_rst <- array(NA, c(P, P, its))
+Covs_rst <- array(NA, c(P, P, its))
+
+if (P <= 4) {
+    Us_rj_rst <- array(NA, c(P, P, its))
+    Covs_rj_rst <- array(NA, c(P, P, its))
+}
+
+# initialize the first entry as a random orthnormal matrix
+Us_rst[, , 1] <- matrix(rnorm(P*P), ncol = P) |> qr() |> qr.Q()
+
+# perform sampling
+set.seed(17042025) 
+for (i in 2:its) {
+    if (i %% 500 == 0) {print(i)}
+    
+    Us_rst[, , i] <- rbing.matrix.gibbs(G, H, Us_rst[, , i-1])
+    Covs_rst[, , i] <- Us_rst[, , i] %*% A %*% t(Us_rst[, , i])
+    
+    if (P <= 4) {
+        Us_rj_rst[, , i] <- rbing.Op(G, H)
+        Covs_rj_rst[, , i] <- Us_rj_rst[, , i] %*% A %*% t(Us_rj_rst[, , i])
+    }
+}
+
+# calculate average covariance matrices
+avgCovs_rst <- apply(Covs_rst[, , (its/2) : its], c(1, 2), mean)
+avgUs_rst <- eigen(avgCovs_rst)$vectors
+
+if (P <= 4) {
+    avgCovs_rj_rst <- apply(Covs_rj_rst[, , 2:its], c(1, 2), mean)
+    avgUs_rj_rst <- eigen(avgCovs_rj_rst)$vectors
+}
+
+# TODO what is the output I need, to make this into a function I can use repeatedly?
+# a function for the rejection sampler
+# a function for the Gibbs sampler
+
+```
+
+
+```{r echo=FALSE}
+# compare matrices side by side in a nice table
+
+knitr::kable(cbind(avgUs_rst + 1i*avgUs_rst, V + 1i* V), 
+             digits = 3,
+             format = "latex", booktabs = TRUE) |> 
+    # making the text smaller will help with complex valued matrices later
+    kable_styling(font_size = 8) |> 
+    add_header_above(c("Mat1" = 4, "Mat2" = 4)) |> 
+    column_spec(4, border_right = TRUE)
+```
+
+```{r echo=TRUE}
+# distances
+grass_dist(avgUs_rst, V)
+# in this case, one of the columns is flipped, and almost all of the "distance" is from that column
+frame_distance(avgUs_rst, V)
+# if you flip the column sign, then the distance is much smaller, similar to the others
+frame_distance(avgUs_rst %*% diag(c(-1, -1, 1, 1)), V)
+# the order of column distances is exactly the same order as the Procrustes distances
+procrustes_distance(avgUs_rst, V)
+
+print("rejection sampler")
+# also compare with the samples from the rejection sampler
+# distances
+grass_dist(avgUs_rj_rst, V)
+# in this case, one of the columns is flipped, and almost all of the "distance" is from that column
+frame_distance(avgUs_rj_rst, V)
+# if you flip the column sign, then the distance is much smaller, similar to the others
+frame_distance(avgUs_rj_rst %*% diag(c(1, -1, 1, 1)), V)
+# the order of column distances is exactly the same order as the Procrustes distances
+procrustes_distance(avgUs_rj_rst, V)
+```
+
+```{r cache=TRUE}
+# 8x8 real Bingham sampler, with Gibbs sampler
+P <- 8
+its <- 1000
+
+set.seed(17042025)
+
+H <- diag(seq(P*2, 1, length.out = P))
+
+G <- rWishart(1, P + 1, diag(P))[, , 1]
+A <- diag(eigen(G)$values)
+V <- eigen(G)$vectors
+
+X <- matrix(rnorm(P*P), ncol = P) |> qr() |> qr.Q()
+
+# set up sampling
+Us_rst <- array(NA, c(P, P, its))
+Covs_rst <- array(NA, c(P, P, its))
+
+# initialize the first entry as a random orthnormal matrix
+Us_rst[, , 1] <- matrix(rnorm(P*P), ncol = P) |> qr() |> qr.Q()
+
+# perform sampling
+set.seed(17042025) 
+for (i in 2:its) {
+    if (i %% 500 == 0) {print(i)}
+    
+    Us_rst[, , i] <- rbing.matrix.gibbs(G, H, Us_rst[, , i-1])
+    Covs_rst[, , i] <- Us_rst[, , i] %*% A %*% t(Us_rst[, , i])
+
+}
+
+# calculate average covariance matrices
+avgCovs_rst <- apply(Covs_rst[, , (its/2) : its], c(1, 2), mean)
+avgUs_rst <- eigen(avgCovs_rst)$vectors
+```
+
+```{r}
+knitr::kable(cbind(avgUs_rst[, 1:4], V[, 1:4]), 
+             digits = 3,
+             caption = "Sample average and True V eigenvectors, cols. 1 - 4",
+             format = "latex", booktabs = TRUE) |> 
+    # making the text smaller will help with complex valued matrices later
+    kable_styling(font_size = 8) |> 
+    add_header_above(c("Avg" = 4, "True V" = 4)) |> 
+    column_spec(4, border_right = TRUE)
+
+knitr::kable(cbind(avgUs_rst[, 5:8], V[, 5:8]), 
+             digits = 3,
+             caption = "Sample average and True V eigenvectors, cols. 5 - 8",
+             format = "latex", booktabs = TRUE) |> 
+    # making the text smaller will help with complex valued matrices later
+    kable_styling(font_size = 8) |> 
+    add_header_above(c("Avg" = 4, "True V" = 4)) |> 
+    column_spec(4, border_right = TRUE)
+
+```
+
+```{r}
+# distances
+grass_dist(avgUs_rst, V)
+# in this case, one of the columns is flipped, and almost all of the "distance" is from that column
+frame_distance(avgUs_rst, V)
+# if you flip the column sign, then the distance is much smaller, similar to the others
+frame_distance(avgUs_rst %*% diag(c(1, -1, 1, 1, 1, 1, 1, 1)), V)
+# the order of column distances is exactly the same order as the Procrustes distances
+procrustes_distance(avgUs_rst, V)
+```
+
+```{r cache=TRUE}
+# 64x64 real Bingham sampler, with Gibbs sampler
+P <- 64
+its <- 1000
+
+set.seed(17042025)
+
+H <- diag(seq(P*2, 1, length.out = P))
+
+G <- rWishart(1, P + 1, diag(P))[, , 1]
+A <- diag(eigen(G)$values)
+V <- eigen(G)$vectors
+
+X <- matrix(rnorm(P*P), ncol = P) |> qr() |> qr.Q()
+
+# set up sampling
+Us_rst <- array(NA, c(P, P, its))
+Covs_rst <- array(NA, c(P, P, its))
+
+# initialize the first entry as a random orthnormal matrix
+Us_rst[, , 1] <- matrix(rnorm(P*P), ncol = P) |> qr() |> qr.Q()
+
+# perform sampling
+set.seed(17042025) 
+for (i in 2:its) {
+    if (i %% 25 == 0) {print(i)}
+    
+    Us_rst[, , i] <- rbing.matrix.gibbs(G, H, Us_rst[, , i-1])
+    Covs_rst[, , i] <- Us_rst[, , i] %*% A %*% t(Us_rst[, , i])
+
+}
+
+# calculate average covariance matrices
+avgCovs_rst <- apply(Covs_rst[, , (its/2) : its], c(1, 2), mean)
+avgUs_rst <- eigen(avgCovs_rst)$vectors
+```
+
+```{r}
+# distances
+grass_dist(avgUs_rst, V, s_tol = 1e-13)
+# in this case, one of the columns is flipped, and almost all of the "distance" is from that column
+frame_distance(avgUs_rst, V)
+# if you flip the column sign, then the distance is much smaller, similar to the others
+# frame_distance(avgUs_rst %*% diag(c(1, -1, 1, 1, 1, 1, 1, 1)), V)
+# the order of column distances is exactly the same order as the Procrustes distances
+procrustes_distance(avgUs_rst, V)
+```
+
+```{r}
+# 4x4 complex Bingham sampler, with Gibbs sampler
+P <- 4
+its <- 1000
+
+set.seed(17042025)
+
+H <- diag(seq(P*2, 1, length.out = P))
+# H <- diag(P:1)
+
+# G <- rWishart(1, P + 1, diag(P))[, , 1]
+G <- rcomplex_wishart(P+1, P, Sigma = diag(P))
+A <- diag(eigen(G)$values)
+V <- eigen(G)$vectors
+
+# set up sampling
+Us_sqB <- array(NA, c(P, P, its))
+Covs_sqB <- array(NA, c(P, P, its))
+
+# initialize the first entry as a random unitary matrix
+Us_sqB[, , 1] <- rcomplex_wishart(P+1, P, Sigma = diag(P)) |> qr() |> qr.Q()
+
+# perform sampling
+set.seed(17042025) 
+for (i in 2:its) {
+    if (i %% 100 == 0) {print(i)}
+    
+    Us_sqB[, , i] <- rcBingUP_gibbs(Us_sqB[, , i-1], G, H, 
+                                    Imtol = 100*.Machine$double.eps)
+    Covs_sqB[, , i] <- Us_sqB[, , i] %*% A %*% t(Conj(Us_sqB[, , i]))
+}
+
+# calculate average covariance matrices
+avgCovs_sqB <- apply(Covs_sqB[, , (its/2) : its], c(1, 2), mean)
+avgUs_sqB <- eigen(avgCovs_sqB)$vectors
+```
+
+```{r}
+# compare the columns
+cbind(avgUs_sqB, V)
+```
+
+```{r}
+# distances
+# grass_dist(avgUs_sqB, V, s_tol = 1e-13)
+# in this case, one of the columns is flipped, and almost all of the "distance" is from that column
+frame_distance(avgUs_sqB, V)
+# if you flip the column sign, then the distance is much smaller, similar to the others
+# frame_distance(avgUs_rst %*% diag(c(1, -1, 1, 1, 1, 1, 1, 1)), V)
+# the order of column distances is exactly the same order as the Procrustes distances
+procrustes_distance(avgUs_sqB, V)
+```
+
+```{r}
+# 8x8 complex Bingham sampler, with Gibbs sampler
+P <- 8
+its <- 1000
+
+set.seed(17042025)
+
+H <- diag(seq(P*2, 1, length.out = P))
+# H <- diag(P:1)
+
+# G <- rWishart(1, P + 1, diag(P))[, , 1]
+G <- rcomplex_wishart(P+1, P, Sigma = diag(P))
+A <- diag(eigen(G)$values)
+V <- eigen(G)$vectors
+
+# set up sampling
+Us_sqB <- array(NA, c(P, P, its))
+Covs_sqB <- array(NA, c(P, P, its))
+
+# initialize the first entry as a random unitary matrix
+Us_sqB[, , 1] <- rcomplex_wishart(P+1, P, Sigma = diag(P)) |> qr() |> qr.Q()
+
+# perform sampling
+set.seed(17042025) 
+for (i in 2:its) {
+    if (i %% 25 == 0) {print(i)}
+    
+    Us_sqB[, , i] <- rcBingUP_gibbs(Us_sqB[, , i-1], G, H, 
+                                    Imtol = 100*.Machine$double.eps)
+    Covs_sqB[, , i] <- Us_sqB[, , i] %*% A %*% t(Conj(Us_sqB[, , i]))
+}
+
+# calculate average covariance matrices
+avgCovs_sqB <- apply(Covs_sqB[, , (its/2) : its], c(1, 2), mean)
+avgUs_sqB <- eigen(avgCovs_sqB)$vectors
+```
+
+```{r}
+# compare the columns
+cbind(avgUs_sqB[, 1:4], V[, 1:4])
+```
+
+```{r}
+# distances
+# grass_dist(avgUs_sqB, V, s_tol = 1e-13)
+# in this case, one of the columns is flipped, and almost all of the "distance" is from that column
+frame_distance(avgUs_sqB, V)
+# if you flip the column sign, then the distance is much smaller, similar to the others
+# frame_distance(avgUs_rst %*% diag(c(1, -1, 1, 1, 1, 1, 1, 1)), V)
+# the order of column distances is exactly the same order as the Procrustes distances
+procrustes_distance(avgUs_sqB, V)
+```
+
+
+```{r cache=TRUE}
+# 16x16 complex Bingham sampler, with Gibbs sampler
+P <- 16
+its <- 1000
+
+set.seed(17042025)
+
+H <- diag(seq(P*2, 1, length.out = P))
+# H <- diag(P:1)
+
+# G <- rWishart(1, P + 1, diag(P))[, , 1]
+G <- rcomplex_wishart(P+1, P, Sigma = diag(P))
+A <- diag(eigen(G)$values)
+V <- eigen(G)$vectors
+
+# set up sampling
+Us_sqB <- array(NA, c(P, P, its))
+Covs_sqB <- array(NA, c(P, P, its))
+
+# initialize the first entry as a random unitary matrix
+Us_sqB[, , 1] <- rcomplex_wishart(P+1, P, Sigma = diag(P)) |> qr() |> qr.Q()
+
+# perform sampling
+set.seed(17042025) 
+for (i in 2:its) {
+    if (i %% 25 == 0) {print(i)}
+    
+    Us_sqB[, , i] <- rcBingUP_gibbs(Us_sqB[, , i-1], G, H, 
+                                    Imtol = 100*.Machine$double.eps)
+    Covs_sqB[, , i] <- Us_sqB[, , i] %*% A %*% t(Conj(Us_sqB[, , i]))
+}
+
+# calculate average covariance matrices
+avgCovs_sqB <- apply(Covs_sqB[, , (its/2) : its], c(1, 2), mean)
+avgUs_sqB <- eigen(avgCovs_sqB)$vectors
+```
+
+```{r}
+# compare the columns
+cbind(avgUs_sqB[, 1:4], V[, 1:4])
+```
+
+```{r}
+# distances
+# grass_dist(avgUs_sqB, V, s_tol = 1e-13)
+# in this case, one of the columns is flipped, and almost all of the "distance" is from that column
+frame_distance(avgUs_sqB, V)
+# if you flip the column sign, then the distance is much smaller, similar to the others
+# frame_distance(avgUs_rst %*% diag(c(1, -1, 1, 1, 1, 1, 1, 1)), V)
+# the order of column distances is exactly the same order as the Procrustes distances
+procrustes_distance(avgUs_sqB, V)
+```
+
+# Rectangular sampler
+
+```{r}
+# 8x4 complex Bingham sampler, with Gibbs sampler
+P <- 8
+d <- 4
+its <- 1000
+
+set.seed(17042025)
+
+H <- diag(seq(d*2, 1, length.out = d))
+# H <- diag(P:1)
+
+# G <- rWishart(1, P + 1, diag(P))[, , 1]
+G <- rcomplex_wishart(P+1, P, Sigma = diag(P))
+A <- diag(eigen(G)$values)
+V <- eigen(G)$vectors
+
+# set up sampling
+Us_recB <- array(NA, c(P, d, its))
+Covs_recB <- array(NA, c(P, P, its))
+
+# initialize the first entry as a random unitary matrix
+Us_recB[, , 1] <- runitary(P, d)
+
+# perform sampling
+set.seed(17042025) 
+for (i in 2:its) {
+    if (i %% 100 == 0) {print(i)}
+    
+    Us_recB[, , i] <- rcmb(Us_recB[, , i-1], G, H)
+    Covs_recB[, , i] <- Us_recB[, , i] %*% A[1:d, 1:d] %*% t(Conj(Us_recB[, , i]))
+}
+
+# calculate average covariance matrices
+avgCovs_recB <- apply(Covs_recB[, , (its/2) : its], c(1, 2), mean)
+avgUs_recB <- (eigen(avgCovs_recB)$vectors)[, 1:d]
+```
+
+```{r}
+cbind(avgUs_recB, V[, 1:d])
+```
+
+```{r}
+# distances
+# grass_dist(avgUs_recB, V[, 1:d], s_tol = 1e-13)
+# in this case, one of the columns is flipped, and almost all of the "distance" is from that column
+frame_distance(avgUs_recB, V[, 1:d])
+# if you flip the column sign, then the distance is much smaller, similar to the others
+# frame_distance(avgUs_recB %*% diag(c(1, -1, 1, 1, 1, 1, 1, 1)), V)
+# the order of column distances is exactly the same order as the Procrustes distances
+procrustes_distance(avgUs_recB, V[, 1:d])
+```
+
+
+\newpage
+
+# Appendix
+
+```{r echo=TRUE}
+#####
+# Lambdak_gibbs_densCovar
+#####
+
+# Lambdak_gibbs_densCovar
+```
+
