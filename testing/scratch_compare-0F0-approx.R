@@ -30,20 +30,25 @@ Omegams <- function(ms, Betaf) {
 }
 
 ### functions to simulate from complex Stiefel manifold
+# return n independent samples from the standard complex normal distribution
 rscnorm <- function(n) {
     return(rnorm(n, 0, 1/sqrt(2)) + 
                1i * rnorm(n, 0, 1/sqrt(2)))
 }
 
+# draw matrix distributed uniformly on V_d^P(C)
 rcstiefel <- function(P, d) {
+    # matrix of independent standard complex Normals
     X1 <- matrix(rscnorm(P*d), ncol = d)
+    # take QR decomposition - not guaranteed to be unique due to numerical methods
     X1qr <- qr(X1)
     QX1 <- qr.Q(X1qr)
+    # extract diagonal elements of R
     dRX1 <- diag(qr.R(X1qr))
-    
+    # extract sign of diagonal elements
     diagD <- sign(Re(dRX1))
-    
-    Qfinal <- t(t(QX1) * diagD)
+    # transform by Q = QD, where d = diag(diagD)
+    Qfinal <- t(t(QX1) * diagD) # faster than matrix multiplication
     return(Qfinal)
 }
 
