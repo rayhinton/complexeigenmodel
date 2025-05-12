@@ -89,7 +89,7 @@ Uk_gibbs_densCovar <- function(data_list, param_list) {
 K <- 3
 P <- 8
 d <- 4
-its <- 1000
+its <- 5000
 
 nks <- rep(1000, K)
 
@@ -204,7 +204,7 @@ print(Sys.time())
 
 # nonburn <- seq(its/2, its, by = 10)
 # nonburn <- seq(its/2, its, by = 1)
-nonburn <- seq(its/2, its, by = 10)
+nonburn <- seq(its/2, its, by = 1)
 
 Ukhats <- array(NA, c(P, d, K))
 for (k in 1:K) {
