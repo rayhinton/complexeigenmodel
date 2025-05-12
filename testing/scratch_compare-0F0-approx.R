@@ -43,12 +43,10 @@ rcstiefel <- function(P, d) {
     # take QR decomposition - not guaranteed to be unique due to numerical methods
     X1qr <- qr(X1)
     QX1 <- qr.Q(X1qr)
-    # extract diagonal elements of R
-    dRX1 <- diag(qr.R(X1qr))
-    # extract sign of diagonal elements
-    diagD <- sign(Re(dRX1))
-    # transform by Q = QD, where d = diag(diagD)
-    Qfinal <- t(t(QX1) * diagD) # faster than matrix multiplication
+    # extract sign of the diagonal elements of R
+    D <- sign(Re(diag(qr.R(X1qr))))
+    # transform by Q = QS, where S = diag(D)
+    Qfinal <- t(t(QX1) * D) # faster than matrix multiplication
     return(Qfinal)
 }
 
