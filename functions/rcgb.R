@@ -70,9 +70,9 @@ rvB <- function(A, opt_upper = 1e5) {
         log((N/b)^(N/2)) + log(det(Om)^-.5)
     
     # Line 5: sample u by acceptance-rejection scheme    
-    acc_prob <- 0
+    log_acc_prob <- -Inf
     u_draw <- 1
-    while(u_draw >= acc_prob) {
+    while(log(u_draw) >= log_acc_prob) {
         # Line 6: sample y from a Normal dist.
         y <- mvtnorm::rmvnorm(1, sigma = solve(Om))
         # Line 7: normalize y
@@ -84,7 +84,7 @@ rvB <- function(A, opt_upper = 1e5) {
         
         # Lines 10-11: accept u with the calculated probability
         u_draw <- runif(1)
-        acc_prob <- exp(log_f_vBL - log_Mst - log_f_ACG)
+        log_acc_prob <- log_f_vBL - log_Mst - log_f_ACG
     }
     
     # Line 12: return u, after the acceptance criteria is met

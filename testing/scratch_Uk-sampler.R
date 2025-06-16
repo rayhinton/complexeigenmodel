@@ -1,5 +1,7 @@
 # test Uk FCD sampler
 
+library(foreach)
+
 source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/functions/rcgb.R")
 source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/testing/scratch_rcomplex_wishart.R")
 source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/functions/generatedata.R")
@@ -33,51 +35,6 @@ Uk_gibbs_densCovar <- function(data_list, param_list) {
     return(U_ks)
 } 
 
-# frob_norm <- function(X) {
-#     return(Re(sum(diag(crossprod(Conj(X), X)))))
-# }
-# 
-# frame_distance <- function(A, B) {
-#     # return(norm(A - B, "F"))
-#     return(frob_norm(A - B))
-# }
-# 
-# procrustes_distance <- function(A, B) {
-#     # Get orthogonal bases
-#     Q_A <- qr.Q(qr(A))
-#     Q_B <- qr.Q(qr(B))
-#     
-#     # Find optimal rotation between the frames
-#     svd_result <- svd(t(Conj(Q_B)) %*% Q_A)
-#     R_opt <- svd_result$v %*% t(Conj(svd_result$u))
-#     
-#     # Compute distance after optimal alignment
-#     # return(norm(Q_A - Q_B %*% R_opt, "F"))
-#     return(frob_norm(Q_A - Q_B %*% R_opt))
-# }
-# 
-# grass_dist <- function (A, B, r = ncol(A), s_tol = 2*.Machine$double.eps) {
-#     stopifnot("A and B must have the same dimensions" = all(dim(A) == dim(B)))
-#     
-#     Sigma <- t(Conj(A)) %*% B
-#     svd_Sigma <- svd(Sigma)
-#     
-#     # check for numerical issues with SVDs
-#     max_diff <- max(svd_Sigma$d[1:r] - 1)
-#     if (any(svd_Sigma$d[1:r] > (1 + s_tol))) {
-#         # warning()
-#         stop(paste0("Singular values exceed 1 by more than s_tol = ", s_tol, 
-#                     ". Maximum excess: ", max_diff))
-#     } else {
-#         sigmas <- pmin(svd_Sigma$d[1:r], 1)
-#     }
-#     
-#     thetas <- acos(sigmas)
-#     sub_dist <- sqrt(sum(thetas^2))
-#     
-#     return(sub_dist)
-# }
-
 # the columns, conditional on others, have certain vector Bingham distribution
 
 # Uk | A, B, V, Lambdak, Pk
@@ -86,12 +43,21 @@ Uk_gibbs_densCovar <- function(data_list, param_list) {
 # - need true Uk0 matrices, not necessarily from any particular distribution
 # - do need Pk generated from correct CW distribution
 
-K <- 3
+# setup -------------------------------------------------------------------
+
+numchains <- 5
+
+K <- 1
 P <- 8
 d <- 4
-its <- 5000
+S_its <- 15000
+
+burnin <- 5000
+thinBy <- 5
 
 nks <- rep(1000, K)
+
+# initialize parameters and generate data ---------------------------------
 
 set.seed(12042025)
 
@@ -109,17 +75,12 @@ sigmak2s <- rep(NA, K)
 Uk0s <- array(NA, c(P, d, K))
 # Gammak0 <- sigmak2 * ( Uk0 %*% Lambdak %*% t(Conj(Uk0)) + diag(P) )
 
-# Uk0_eigenvectors <- eigen(Uk0 %*% Lambdak %*% t(Conj(Uk0)))$vectors[, 1:d]
-Uk0s_evecs <- array(NA, c(P, d, K))
-
-# cbind(Uk0[, 1], Uk0_eigenvectors[, 1])
-
 set.seed(22042025)
 # Yk <- rcomplex_wishart(nk, P, Gammak0)
 Yks <- array(NA, c(P, P, K))
 data_list <- list()
 
-Uks <- array(NA, c(P, d, K, its))
+Uks <- array(NA, c(P, d, K, S_its))
 
 for (k in 1:K) {
     Lambdaks[, , k] <- rgamma(d, 1, 1) |> sort(decreasing = TRUE) |> diag()
@@ -135,9 +96,9 @@ for (k in 1:K) {
     # random initialization for each
     # Uks[, , k, 1] <- runitary(P, d)
     # ideal initialization at the exact true Uk0
-    Uks[, , k, 1] <- Uk0s[, , k]
-    
-    Uk0s_evecs[, , k] <- eigen(Uk0s[, , k] %*% Lambdaks[, , k] %*% t(Conj(Uk0s[, , k])) )$vectors[, 1:d]
+    # Uks[, , k, 1] <- Uk0s[, , k]
+    Uks[, , k, 1] <- eigen(Yks[, , k])$vectors[, 1:d]
+
 }
 
 param_list <- list(
@@ -145,7 +106,7 @@ param_list <- list(
     d = d,
     K = K,
     n_k = nks,
-    U_ks = Uks[, , , 1],
+    # U_ks = Uks[, , , 1],
     Lambda_ks = Lambdaks,
     sigma_k2s = sigmak2s,
     Vs = V,
@@ -153,110 +114,109 @@ param_list <- list(
     Bs = B
 )
 
-# initialize a sample for Uk
+if (K == 1) {
+    param_list$U_ks <- array(Uks[, , , 1], c(P, d, 1))
+} else {
+    param_list$U_ks <- Uks[, , , 1]
+}
+
+# make different initializations ------------------------------------------
+
+# for testing purposes - assuming K = 1
+
+# estimate Ukest from data, using first d eigenvectors
+Ukest <- eigen(Yks[, , 1])$vectors[, 1:d]
+
+# attempts to generate "overdispersed" starting points
+initialUks <- list(
+    NULL, 
+    Uk_MH_Cayley(Ukest, .1, FALSE, NULL),
+    Uk_MH_Cayley(Ukest, .2, FALSE, NULL),
+    Ukest, MASS::Null(Ukest)[, 1:d]
+)
+
+# run sampler -------------------------------------------------------------
+
+cluster <- parallel::makeCluster(numchains)
+doParallel::registerDoParallel(cluster)
+
+manysamples <- list()
+
 set.seed(13042025)
-
-# Uks <- array(NA, c(P, d, K, its))
-avgCovs <- array(NA, c(P, P, K, its))
-# Uks[, , 1] <- runitary(P, d)
-# Uks[, , 1] <- diag(1+0i, nrow = P, ncol = d)
-# try an initialization that is based on the data
-# Uks[, , 1] <- eigen((nk*sigmak2)^-1 * Yk - diag(P))$vectors[, 1:d]
-
 {
-print(Sys.time())
-for (s in 2:its) {
-    if (s %% 500 == 0) print(paste0("s = ", s))
+    print(Sys.time())
+    manysamples <- foreach(j = 1:numchains) %dopar% {
+        
+        Uks <- array(NA, c(P, d, K, S_its))
+        
+        if(is.null(initialUks[[j]])) {
+            Uks[, , 1, 1] <- runif_stiefel(P, d, 2)
+        } else {
+            Uks[, , 1, 1] <- initialUks[[j]]
+        }
+        param_list$U_ks <- array(Uks[, , , 1], c(P, d, 1))
+        
+        for (s in 2:S_its) {
+            if (s %% 500 == 0) print(paste0("s = ", s))
+            
+            Uks[, , , s] <- Uk_gibbs_densCovar(data_list, param_list)
+            if (K == 1) {
+                param_list$U_ks <- array(Uks[, , , s], c(P, d, 1))
+            } else {
+                param_list$U_ks <- Uks[, , , s]
+            }
     
-    # VAVH <- param_list$Vs %*% param_list$As %*% t(Conj(param_list$Vs))
-    # 
-    # for (k in 1:K) {
-    #     # Ukc <- Uks[, , k, s-1]
-    #     Ukc <- param_list$U_ks[, , k]
-    #     
-    #     for (j in sample(d)) {
-    #         # bj <- B[j, j]
-    #         bj <- param_list$Bs[j, j]
-    #         # lambdajk <- Lambdaks[j, j, k]
-    #         lambdajk <- param_list$Lambda_ks[j, j, k]
-    #         
-    #         # TODO VAV^H could be calculated beforehand - the value does not change
-    #         # parj <- bj * VAVH + lambdajk/(1 + lambdajk) * Yks[, , k]
-    #         parj <- bj * VAVH + lambdajk/(1 + lambdajk) * data_list[[k]]
-    #         
-    #         Ukc[, j] <- rcvb_LN(Ukc, j, parj)
-    #     }
-    #     
-    #     Uks[, , k, s] <- Ukc
-    #     param_list$U_ks[, , k] <- Ukc
-    #     avgCovs[, , k, s] <- Ukc %*% Lambdaks[, , k] %*% t(Conj(Ukc))
-    #     
-    # }
-    
-    Uks[, , , s] <- Uk_gibbs_densCovar(data_list, param_list)
-    param_list$U_ks <- Uks[, , , s]
-    for (k in 1:K) {
-        avgCovs[, , k, s] <- Uks[, , k, s] %*% Lambdaks[, , k] %*% t(Conj(Uks[, , k, s]))
+        }
+        
+        whichk <- 1
+        
+        manysamples[[j]] <- list(Uk_S = Uks[, , whichk, ], accCount = 1)
     }
-}
-print(Sys.time())
-}
-
-# nonburn <- seq(its/2, its, by = 10)
-# nonburn <- seq(its/2, its, by = 1)
-nonburn <- seq(its/2, its, by = 1)
-
-Ukhats <- array(NA, c(P, d, K))
-for (k in 1:K) {
-    Ukhats[, , k] <- eigen(apply(avgCovs[, , k, nonburn], c(1, 2), mean))$vectors[, 1:d]
+    print(Sys.time())
 }
 
-# Ukhat <- eigen(apply(avgCovs[, , nonburn], c(1, 2), mean))$vectors[, 1:d]
+parallel::stopCluster(cluster)
 
-k <- 3
-coli <- 4
-cbind(Ukhats[, coli, k],
-      Uk0s[, coli, k])
-cbind(Ukhats[, coli, k],
-      Uk0s_evecs[, coli, k])
+# use summarize function --------------------------------------------------
 
-Ukhat <- Ukhats[, , k]
-Uk0 <- Uk0s[, , k]
-Uk0_evecs <- Uk0s_evecs[, , k]
+# make a new param_list that has required info for summary functions
 
-# Grassmannian distance between the subspaces
-grass_dist(Ukhat, Uk0)
-# Frobenius norm of difference between the projection matrices
-frob_norm(Ukhat %*% t(Ukhat) - Uk0 %*% t(Conj(Uk0)))
-# Distance between the eigenvector matrices
-frame_distance(Ukhat, Uk0)
-# Distance between the eigenvectors in terms of Procustes statistic
-procrustes_distance(Ukhat, Uk0)
+# param_list <- list(
+#     Sigmas = Sigma0,
+#     invSigmas = invSigma0,
+#     Lambda_ks = diag(Lambdak0),
+#     Omega_ks = diag(Omegak0),
+#     sigma_k2s = sigmak02,
+#     P = P,
+#     d = d,
+#     n_k = n_k,
+#     Uk0 = Uk0
+# )
 
-# Grassmannian distance between the subspaces
-grass_dist(Ukhat, Uk0_evecs)
-# Frobenius norm of difference between the projection matrices
-frob_norm(Ukhat %*% t(Ukhat) - Uk0_evecs %*% t(Conj(Uk0_evecs)))
-# Distance between the eigenvector matrices
-frame_distance(Ukhat, Uk0_evecs)
-# Distance between the eigenvectors in terms of Procustes statistic
-procrustes_distance(Ukhat, Uk0_evecs)
+new_param_list <- list(Lambda_ks = diag(Lambdaks[, , 1]),
+                       sigma_k2s = sigmak2s,
+                       P = P,
+                       d = d,
+                       n_k = nks,
+                       Uk0 = Uk0s[, , 1])
 
-procrustes_distance(Uk0, Uk0_evecs)
-grass_dist(Uk0, Uk0_evecs)
+summarystuff <- summarize_Uk(manysamples, new_param_list, burnin = burnin)
 
-# -------------------------------------------------------------------------
+summarystuff$avgs_df
 
-# a "credible" interval?
-# calculate distance of sampled matrices to the "average" matrix
+dev.new()
+pdf("Uk_CGB_sampler_trace.pdf", width = 9, height = 7.5)
+dist_vals <- avg_tracePlots(manysamples, summarystuff, new_param_list, 
+                            burnin = burnin, tracePlotEvery = thinBy)
+dev.off()
 
-# in order to do this right, I need a "distance" which properly 
+bigoutmcmcs <- make_mcmclist(dist_vals, S_its, burnin, thinBy)
 
-dists_Uks_Ukhat <- rep(NA, length(nonburn))
+dist_vals$chain_quantiles
+with(dist_vals,
+     chain_quantiles[rownames(chain_quantiles) == "d_to_avgUk", ])
 
-for (i in 1:length(nonburn)) {
-    # dists_Uks_Ukhat[i] <- procrustes_distance(Uks[, , nonburn[i]], Ukhat)$fnorm
-    dists_Uks_Ukhat[i] <- grass_dist(Uks[, , nonburn[i]], Ukhat)$sub_dist
-}
+coda::gelman.diag(bigoutmcmcs)
 
-quantile(dists_Uks_Ukhat, probs = c(.025, .975))
+coda::effectiveSize(bigoutmcmcs) |> t()
+lapply(bigoutmcmcs, coda::effectiveSize)

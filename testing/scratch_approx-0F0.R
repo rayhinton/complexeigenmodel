@@ -82,6 +82,7 @@ beta_0
 
 A_0 <- diag(sqrt(w_0) * alpha_0)
 B_0 <- diag(sqrt(w_0) * beta_0)
+G_0 <- V_0 %*% A_0 %*% t(Conj(V_0))
 
 # U_k matrix parameters
 # U_k_0
@@ -91,10 +92,10 @@ for (i in 1:bing_its) {
     if (i %% 500 == 0) {
         print(paste0("i = ", i))
     }
-    Ukinit <- rcmb(Ukinit, A_0, B_0)
+    Ukinit <- rcmb(Ukinit, G_0, B_0)
 }
 for (s in 1:(K*100)) {
-    Ukinit <- rcmb(Ukinit, A_0, B_0)
+    Ukinit <- rcmb(Ukinit, G_0, B_0)
     if (s %% 100 == 0) {
         print(paste0("k = ", s/100))
         U_k_0[, , s/100] <- Ukinit

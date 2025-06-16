@@ -39,7 +39,13 @@ rabw.mh<-function(a,b,w,UA,V,gs=200,wa=1/p,wb=1/p^2 ) {
   for(k in 1:K) { M<- M - (t(V)%*%UA[,,k])^2 }
  
   wp<-rgamma(1,choose(p,2)*K/2+wa, t(a)%*%M%*%b + wb )
-  if(log(runif(1))< K*( log(hadj(a,b,wp)) - log(hadj(a,b,w)) ) ) {w<-wp}
+  
+  if (doMH) {
+      if(log(runif(1))< K*( log(hadj(a,b,wp)) - log(hadj(a,b,w)) ) ) {w<-wp}
+  } else {
+      w <- wp
+  }
+
 
     
   for(j in sample(2:(p-1))) {
@@ -48,8 +54,19 @@ rabw.mh<-function(a,b,w,UA,V,gs=200,wa=1/p,wb=1/p^2 ) {
     lb<-max( a[ (1:p)>j ] )
     as<-seq(lb,ub,length=gs)
     lp<-  -w*as*(M[j,]%*%b)+.5*K*apply(log(abs(outer(as,a[-j],"-"))),1,sum)
+
+    # RJH troubleshooting
+    aNAs <- sum(is.na(exp(lp-max(lp))))
+    if (aNAs > 0) {
+        print( paste0("s = ", s, "; a NAs:", aNAs) )
+    }
+    
     ap[j]<-sample(as,1,prob=exp(lp-max(lp)))
- if(log(runif(1))< K*( log(hadj(ap,b,w)) - log(hadj(a,b,w)) ) ){a<-ap }
+    if (doMH) { 
+     if(log(runif(1))< K*( log(hadj(ap,b,w)) - log(hadj(a,b,w)) ) ){a<-ap }
+    } else {
+        a <- ap
+    }
 
                              }
 
@@ -59,8 +76,20 @@ rabw.mh<-function(a,b,w,UA,V,gs=200,wa=1/p,wb=1/p^2 ) {
     lb<-max( b[ (1:p)>j ] )
     bs<-seq(lb,ub,length=gs)
     lp<-  -w*bs*(M[,j]%*%a)+.5*K*apply(log(abs(outer(bs,b[-j],"-"))),1,sum)
+    
+    # RJH troubleshooting
+    bNAs <- sum(is.na(exp(lp-max(lp))))
+    if (bNAs > 0) {
+        print( paste0("s = ", s, "; b NAs:", bNAs) )
+    }
+    
     bp[j]<-sample(bs,1,prob=exp(lp-max(lp)))
-    if(log(runif(1))< K*( log(hadj(a,bp,w)) - log(hadj(a,b,w)) ) ) {b<-bp}
+    if (doMH) {
+        if(log(runif(1))< K*( log(hadj(a,bp,w)) - log(hadj(a,b,w)) ) ) {b<-bp}
+    } else {
+        b <- bp
+    }
+
                              }
 
   list(a=a, b=b,w=w )
@@ -121,6 +150,13 @@ CST<- cos(THETA)*sin(THETA)
 rU1U2.M1M2.th<-function(M1,M2) {
   lpz<-C2T*(M1[1,1]+M2[2,2])+S2T*(M1[2,2]+M2[1,1])+
        CST*(M1[1,2]+M1[2,1]-M2[1,2]-M2[2,1] )
+
+    # RJH troubleshooting
+    thetaNAs <- sum(is.na(exp(lpz-max(lpz))))
+    if (thetaNAs > 0) {
+        print( paste0("s = ", s, "; theta NAs: ", thetaNAs) )
+    }
+    
   theta<-sample(THETA,1,prob=exp(lpz-max(lpz)) )
   x<-(-1)^rbinom(1,1,.5)
   matrix( c(cos(theta),sin(theta),x*sin(theta),-x*cos(theta)),2,2)
