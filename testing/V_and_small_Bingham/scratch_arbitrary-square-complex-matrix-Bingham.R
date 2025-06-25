@@ -23,7 +23,7 @@ P <- 4
 set.seed(9032025)
 Av <- runitary(P, P)
 Aevals <- (P:1)*20
-# A <- rcomplex_wishart(P, P, diag(P))
+# A <- rcomplex_wishart(P, diag(P))
 A0 <- Av %*% diag(Aevals) %*% t(Conj(Av))
 # B <- runif(P, 0, 10) |> sort(decreasing = TRUE)
 B0 <- (P:1)

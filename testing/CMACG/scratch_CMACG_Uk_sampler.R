@@ -126,7 +126,7 @@ customEvals <- FALSE
 
 set.seed(27052025)
 # Sigma0 ~ diffuse Complex Wishart, PxP
-Sigma0 <- rcomplex_wishart(P+1, P, diag(P))
+Sigma0 <- rcomplex_wishart(P+1, diag(P))
 if (tracenorm) {
     Sigma0 <- P * Sigma0 / Re(sum(diag(Sigma0)))
 }
@@ -158,7 +158,7 @@ sigmak02 <- rgamma(1, 1, 1)
 
 # Yk ~ CW(nk, sigmak02 * (Uk0 %*% Lambdak0 %*% t(Conj(Uk0))) )
 Gamma0 <- sigmak02 * (Uk0 %*% Lambdak0 %*% t(Conj(Uk0)) + diag(P))
-Yk <- rcomplex_wishart(nk, P, Gamma0)
+Yk <- rcomplex_wishart(nk, Gamma0)
 
 # understand U0 and UE, true eigenvectors ---------------------------------
 
@@ -417,9 +417,9 @@ R <- runif_stiefel(P, P, betaf = 2)
 UQ <- U %*% Q
 RU <- R %*% U
 
-Sigma <- rcomplex_wishart(P+1, P, diag(P))
+Sigma <- rcomplex_wishart(P+1, diag(P))
 
-Y <- rcomplex_wishart(P+1, P, diag(P))
+Y <- rcomplex_wishart(P+1, diag(P))
 LA <- diag(d:1)
 
 # dCMACG <- function(X, Sigma, logscale = TRUE) {

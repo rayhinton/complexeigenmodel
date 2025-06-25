@@ -40,7 +40,7 @@ b <- seq(from = P*2, to = 1, length.out = d)
 Bs <- diag(b)
 
 set.seed(19042025)
-V_0 <- eigen(rcomplex_wishart(100, P, diag(P)))$vector
+V_0 <- eigen(rcomplex_wishart(100, diag(P)))$vector
 G_0 <- V_0 %*% As %*% t(Conj(V_0))
 
 # multiple Uk matrices ----------------------------------------------------
@@ -119,7 +119,7 @@ my.rCbing.Op(newG, newH, Imtol = 100*.Machine$double.eps)
 
 set.seed(20042025)
 Vs <- array(NA, c(P, P, gibbsIts))
-Vs[, , 1] <- eigen(rcomplex_wishart(P+1, P, diag(P)))$vector
+Vs[, , 1] <- eigen(rcomplex_wishart(P+1, diag(P)))$vector
 Vcovs <- array(NA, c(P, P, gibbsIts))
 
 param_list$Vs <- Vs[, , 1]

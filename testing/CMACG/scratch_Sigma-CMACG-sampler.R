@@ -48,7 +48,7 @@ rCMACG <- function(nrow, ncol, Sigma) {
 }
 
 rFTCW <- function(Sigma, n, a) {
-    W <- rcomplex_wishart(n, nrow(Sigma), Sigma)
+    W <- rcomplex_wishart(n, Sigma)
     Y <- a * W / Re(sum(diag(W)))
     return(Y)
 }

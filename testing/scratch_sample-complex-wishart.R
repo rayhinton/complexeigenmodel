@@ -114,7 +114,7 @@ for (i in 1:its) {
     all_u_trs[i] <- Re(sum(diag(A_u_unt)))
     all_u_col1s[, i] <- A_u_unt[, 1]
     
-    A_my_unt <- rcomplex_wishart(n, P, Sigma_0)
+    A_my_unt <- rcomplex_wishart(n, Sigma_0)
     A_my <- C %*% A_my_unt %*% t(Conj(C))
     all_my_Ts[, , i] <- t(Conj(Eigen_chol( A_my )))
     

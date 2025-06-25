@@ -274,8 +274,8 @@ rcBingUP <- function(A, B) {
     nrej <- 0
     while (rej) {
         # browser()
-        # W <- rcomplex_wishart(nu, P, S/2)
-        W <- rcomplex_wishart(nu, P, S)
+        # W <- rcomplex_wishart(nu, S/2)
+        W <- rcomplex_wishart(nu, S)
         Weigen <- eigen(W)
         
         # TODO do microbenchmark - which is faster? multiplying by a diagonal matrix of +- 1, or using vector recycling?
@@ -356,7 +356,7 @@ my.rCbing.Op <- function(A,B, istatus = 0, Imtol = .Machine$double.eps*2) {
             # Y<-Z%*%cholM ; 
             # tmp<-eigen(t(Y)%*%Y)
             
-            W <- rcomplex_wishart(nu_df, dim(A)[1], M)
+            W <- rcomplex_wishart(nu_df, M)
             tmp <- eigen(W)
             
             U<-tmp$vec%*%diag((-1)^rbinom(dim(A)[1],1,.5)) ; L<-diag(tmp$val)

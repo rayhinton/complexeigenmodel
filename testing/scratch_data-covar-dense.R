@@ -96,5 +96,5 @@ for (k in 1:K) {
     #     (diag(nk[k]) - matrix(1/nk[k], nk[k], nk[k])) %*% Y_k[[k]]
     # P_k [, , k] <- t(Conj(Y_k[[k]])) %*% Y_k[[k]]
     # P_k[, , k] <- rcwis(nk[k], Sigma_k_0[, , k])
-    P_k[, , k] <- rcomplex_wishart(nk[k], P, Sigma_k_0[, , k])
+    P_k[, , k] <- rcomplex_wishart(nk[k], Sigma_k_0[, , k])
 }

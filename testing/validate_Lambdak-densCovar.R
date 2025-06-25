@@ -53,7 +53,7 @@ for (k in 1:K) {
     Sigma_0 <- sigma2 * ( U %*% diag(Lambda_0) %*% t(Conj(U)) + diag(P) )
     
     # generate data value
-    data_list[[k]] <- rcomplex_wishart(n_k[k], P, Sigma_0)
+    data_list[[k]] <- rcomplex_wishart(n_k[k], Sigma_0)
     
     # store values in arrays to be put in param_list
     U_ks[, , k] <- U
@@ -87,7 +87,7 @@ for (yi in 1:Ytests) {
     for (k in 1:K) {
         Sigma_0 <- sigma_k2s[k] * ( U_ks[, , k] %*% diag(Lambda_k_0[, k]) %*% 
                                   t(Conj(U_ks[, , k])) + diag(P) )
-        data_list[[k]] <- rcomplex_wishart(n_k[[k]], P, Sigma_0)
+        data_list[[k]] <- rcomplex_wishart(n_k[[k]], Sigma_0)
     }
 
     # holds all sampled Lambda values

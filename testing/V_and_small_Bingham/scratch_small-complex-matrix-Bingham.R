@@ -26,7 +26,7 @@ C <- diag(c(2, 1))
 
 # set.seed(26022025)
 # # A <- rcwis(P, diag(P))
-# A <- rcomplex_wishart(P, P, diag(P))
+# A <- rcomplex_wishart(P, diag(P))
 # # B is a real diagonal matrix, with descending values
 # B <- diag(sort(rgamma(P, 1, 1), decreasing = TRUE))
 
@@ -45,7 +45,7 @@ set.seed(8032025)
 for (i in 1:reps) {
     if (i%% 50 == 0) print(i)
 
-    # A <- rcomplex_wishart(P, P, diag(P))
+    # A <- rcomplex_wishart(P, diag(P))
     # B is a real diagonal matrix, with descending values
     # B <- diag(sort(rgamma(P, 1, 1), decreasing = TRUE))
     
@@ -189,7 +189,7 @@ for (i in 1:reps) {
     if (i%% 100 == 0) print(i)
     
     # A <- rcwis(P, diag(P))
-    # A <- rcomplex_wishart(P, P, diag(P))
+    # A <- rcomplex_wishart(P, diag(P))
     # A <- rWishart(1, P+1, diag(P))[, , 1]
     # B is a real diagonal matrix, with descending values
     # B <- diag(sort(rgamma(P, 1, 1), decreasing = TRUE))    

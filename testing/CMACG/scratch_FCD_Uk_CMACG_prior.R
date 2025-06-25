@@ -153,7 +153,7 @@ genData_Uk_CMACG <- function(P, d, n_k, tracenorm, customEvals, sigmaevals,
 
     set.seed(parameterseed)
     # Sigma0 ~ diffuse Complex Wishart, PxP
-    Sigma0 <- rcomplex_wishart(P+1, P, diag(P))
+    Sigma0 <- rcomplex_wishart(P+1, diag(P))
     if (tracenorm) {
         Sigma0 <- P * Sigma0 / Re(sum(diag(Sigma0)))
     }
@@ -189,7 +189,7 @@ genData_Uk_CMACG <- function(P, d, n_k, tracenorm, customEvals, sigmaevals,
     # Yk ~ CW(n_k, sigmak02 * (Uk0 %*% Lambdak0 %*% t(Conj(Uk0))) )
     Gamma0 <- sigmak02 * (Uk0 %*% Lambdak0 %*% t(Conj(Uk0)) + diag(P))
     set.seed(dataseed)
-    Yk <- rcomplex_wishart(n_k, P, Gamma0)
+    Yk <- rcomplex_wishart(n_k, Gamma0)
     
     # create output
     data_list <- list(Yk)

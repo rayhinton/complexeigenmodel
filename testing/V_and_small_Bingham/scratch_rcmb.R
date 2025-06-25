@@ -76,8 +76,8 @@ its <- 2500
 
 set.seed(9042025)
 # generate an 8x8 parameter G
-G <- rcomplex_wishart(P+1, P, diag(P))
-Gother <- rcomplex_wishart(P+1, P, diag(P:1))
+G <- rcomplex_wishart(P+1, diag(P))
+Gother <- rcomplex_wishart(P+1, diag(P:1))
 
 # distance between G and Gother
 grass_dist(eigen(G)$vectors[, 1:d], eigen(Gother)$vectors[, 1:d])
@@ -92,7 +92,7 @@ eigen(Gother)$vectors[, 1]
 S <- solve(diag(ceiling(max(eigen(G)$values)), nrow = P) - G)
 eigen(S)$values
 
-W <- rcomplex_wishart(P+1, P, S)
+W <- rcomplex_wishart(P+1, S)
 U <- eigen(W)$vectors
 L <- diag(eigen(W)$values)
 

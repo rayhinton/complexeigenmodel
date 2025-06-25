@@ -46,7 +46,7 @@ demo_FCD <- function(Lambda_ks, P = 12, d = 4, K = 3, nk_scale = 1000,
         print(summary(eigen(M_k)$values))
         
         # data_list[[k]] <- rcwis(n_k[k], sigma_k20[k] * M_k)
-        data_list[[k]] <- rcomplex_wishart(n_k[k], P, sigma_k20[k] * M_k)
+        data_list[[k]] <- rcomplex_wishart(n_k[k], sigma_k20[k] * M_k)
     }
     
     # stand-in for sigma_k2, the parameters to be sampled
@@ -178,7 +178,7 @@ demo_random_post <- function(Mk, sigma_02, n, Mk_df, ex_its, hpd_round = 11) {
     
     for (i in 1:ex_its) {
       # Pk <- rcwis(n, G0)
-      Pk <- rcomplex_wishart(n, P, G0)
+      Pk <- rcomplex_wishart(n, G0)
       
       ak <- .ak_sigmak2_densCovar(P, n)
       bk <- .bk_sigmak2_densCovar(Mk, Pk)
@@ -215,7 +215,7 @@ hpd_round <- 11
 
 set.seed(14032025)
 # Mk <- rcwis(Mk_df, diag(P))
-Mk <- rcomplex_wishart(Mk_df, P, diag(P))
+Mk <- rcomplex_wishart(Mk_df, diag(P))
 
 Mk <- eigen(Mk)$vectors %*% 
   # Mk has eigenvalues of similar scale
@@ -228,7 +228,7 @@ demo_random_post(Mk, sigma_02, n, Mk_df, ex_its, hpd_round = hpd_round)
 
 set.seed(14032025)
 # Mk <- rcwis(Mk_df, diag(P))
-Mk <- rcomplex_wishart(Mk_df, P, diag(P))
+Mk <- rcomplex_wishart(Mk_df, diag(P))
 
 Mk <- eigen(Mk)$vectors %*% 
   # Mk has eigenvalues of similar scale

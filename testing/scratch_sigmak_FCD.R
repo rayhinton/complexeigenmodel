@@ -121,7 +121,7 @@ set.seed(10032025)
 M1 <- rcwis(n1, diag(P1))
 M1 <- eigen(M1)$vectors %*% diag(seq(30, 0.5, length.out = P1)) %*%
     t(Conj(eigen(M1)$vectors)); diag(M1) <- Re(diag(M1))
-# M1 <- rcomplex_wishart(P1+2, P1, diag(P1))
+# M1 <- rcomplex_wishart(P1+2, diag(P1))
 # M1 <- diag(P1)
 invM1 <- solve(M1)
 # invM1 <- M1
@@ -139,7 +139,7 @@ sigma2_ests <- rep(NA, ests)
 
 for (i in 1:ests) {
     Pi <- rcwis(n1, G1)
-    # Pi <- rcomplex_wishart(n1, P1, G1)
+    # Pi <- rcomplex_wishart(n1, G1)
     sigma2_ests[i] <- Re(sum(diag(invM1 %*% Pi))) / (P1*n1 - 1)
 }
 
@@ -156,7 +156,7 @@ sum(abs(M1offdiags)) / sum(abs(M1diags))
 check_ests <- rep(NA, ests)
 for (i in 1:ests) {
     # Xi <- rcwis(n1, M1)
-    Xi <- rcomplex_wishart(n1, P1, M1)
+    Xi <- rcomplex_wishart(n1, M1)
     check_ests[i] <- Re(sum(diag(Xi)))
 }
 

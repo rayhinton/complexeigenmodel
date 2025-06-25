@@ -114,7 +114,7 @@ demo_FCD <- function(Lambda_ks, P = 12, d = 4, K = 3, nk_scale = 1000,
         print(paste0("Summary of eigenvalues for M_",k," matrix"))
         print(summary(eigen(M_k)$values))
         
-        data_list[[k]] <- rcomplex_wishart(n_k[k], P, sigma_k20[k] * M_k)
+        data_list[[k]] <- rcomplex_wishart(n_k[k], sigma_k20[k] * M_k)
     }
     
     # sigma_k2, the parameters to be sampled
@@ -263,7 +263,7 @@ demo_random_post <- function(Mk, sigma_02, n, Mk_df, ex_its, hpd_round = 11) {
     # for different observed data matrices Pk, calculate posterior summaries
     for (i in 1:ex_its) {
         # generate a new data observation
-        Pk <- rcomplex_wishart(n, P, G0)
+        Pk <- rcomplex_wishart(n, G0)
         
         # calculate the Inverse Gamma parameters
         ak <- .ak_sigmak2_densCovar(P, n)
@@ -315,7 +315,7 @@ hpd_round <- 11 # digits to round the Mk matrix, to ensure it is exactly hpd
 
 # generate the parameter matrix for the data generating CW distribution
 set.seed(14032025)
-Mk <- rcomplex_wishart(Mk_df, P, diag(P))
+Mk <- rcomplex_wishart(Mk_df, diag(P))
 
 # modify the eigenvalues, to have a similar scale
 Mk <- eigen(Mk)$vectors %*% 
@@ -345,7 +345,7 @@ Mk_df <- 1000
 hpd_round <- 11
 
 set.seed(14032025)
-Mk <- rcomplex_wishart(Mk_df, P, diag(P))
+Mk <- rcomplex_wishart(Mk_df, diag(P))
 
 # set eigenvalues to be similar to those from a previous example, with the 
 # final d eigenvalues repeated.

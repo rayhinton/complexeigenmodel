@@ -279,7 +279,7 @@ The estimated eigenvectors are close to the columns of $V$, and the number of re
 ```{r ex-complex-eigenvectors}
 # generate a G with complex eigenvectors, and small, close eigenvalues
 set.seed(4042025)
-Ginit <- rcomplex_wishart(3, 2, diag(2))
+Ginit <- rcomplex_wishart(3, diag(2))
 Gvecs <- eigen(Ginit)$vectors
 Gvals <- c(4, 1)
 G <- Gvecs %*% diag(Gvals) %*% t(Conj(Gvecs))
@@ -329,7 +329,7 @@ nrejs <- rep(NA, nreps)
 set.seed(5042025)
 for (i in 1:nreps) {
     
-    Ginit <- rcomplex_wishart(3, 2, diag(2))
+    Ginit <- rcomplex_wishart(3, diag(2))
     Gvecs <- eigen(Ginit)$vectors
     Gvals <- c(7, 3) + runif(2, -1, 1)
     G <- Gvecs %*% diag(Gvals) %*% t(Conj(Gvecs))
@@ -360,7 +360,7 @@ nrejs <- rep(NA, nreps)
 set.seed(5042025)
 for (i in 1:nreps) {
     
-    Ginit <- rcomplex_wishart(3, 2, diag(2))
+    Ginit <- rcomplex_wishart(3, diag(2))
     Gvecs <- eigen(Ginit)$vectors
     Gvals <- c(60, 21) + runif(2, -10, 10)
     G <- Gvecs %*% diag(Gvals) %*% t(Conj(Gvecs))
@@ -388,7 +388,7 @@ Now, I briefly demonstrate the rejection sampler for $3 \times 3$ matrices. The 
 
 # create G matrix parameter
 set.seed(5042025)
-Ginit <- rcomplex_wishart(4, 3, diag(3))
+Ginit <- rcomplex_wishart(4, diag(3))
 Gvecs <- eigen(Ginit)$vectors
 Gvals <- c(7, 4, 1)
 G <- Gvecs %*% diag(Gvals) %*% t(Conj(Gvecs))
@@ -428,7 +428,7 @@ When one of the eigenvalues for $G$ is farther, i.e. (20, 4, 1), the rejection s
 
 # create G matrix parameter
 set.seed(5042025)
-Ginit <- rcomplex_wishart(4, 3, diag(3))
+Ginit <- rcomplex_wishart(4, diag(3))
 Gvecs <- eigen(Ginit)$vectors
 Gvals <- c(20, 4, 1)
 G <- Gvecs %*% diag(Gvals) %*% t(Conj(Gvecs))
@@ -471,7 +471,7 @@ This demonstrates the order of run times for sampling different size matrices wi
 # 2x2
 set.seed(5042025)
 # randomized eigenvectors
-Ginit <- rcomplex_wishart(3, 2, diag(2))
+Ginit <- rcomplex_wishart(3, diag(2))
 Gvecs <- eigen(Ginit)$vectors
 
 # G matrices with close and far eigenvalues
@@ -486,7 +486,7 @@ H2 <- diag(c(7, 3))
 # 3x3
 set.seed(5042025)
 # randomized eigenvectors
-G3init <- rcomplex_wishart(4, 3, diag(3))
+G3init <- rcomplex_wishart(4, diag(3))
 G3vecs <- eigen(G3init)$vectors
 
 # G matrices with close and far eigenvalues

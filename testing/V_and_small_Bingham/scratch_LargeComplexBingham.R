@@ -22,7 +22,7 @@ P <- 4
 set.seed(9032025)
 Av <- runitary(P, P)
 Aevals <- (P:1)
-# A <- rcomplex_wishart(P, P, diag(P))
+# A <- rcomplex_wishart(P, diag(P))
 A <- Av %*% diag(Aevals) %*% t(Conj(Av))
 # B <- runif(P, 0, 10) |> sort(decreasing = TRUE)
 B <- (P:1)
@@ -32,7 +32,7 @@ eigen(A)
 B
 
 # generate a random initial matrix, X, which should have orthonormal columns
-X <- (rcomplex_wishart(P, P, diag(P)) |> eigen())$vector
+X <- (rcomplex_wishart(P, diag(P)) |> eigen())$vector
 # the matrix has orthonormal columns
 t(Conj(X)) %*% X
 
@@ -61,7 +61,7 @@ Covs <- array(NA, c(P, P, gibbsIts))
 
 set.seed(25032025)
 # generate a random initial matrix, X, which should have orthonormal columns
-Xs[, , 1] <- (rcomplex_wishart(P, P, diag(P)) |> eigen())$vector
+Xs[, , 1] <- (rcomplex_wishart(P, diag(P)) |> eigen())$vector
 for (i in 2:gibbsIts) {
     if (i %% 100 == 0) print(i)
     

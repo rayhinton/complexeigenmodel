@@ -34,7 +34,7 @@ Sigma_0_c <- real_to_complex(U_r %*% L_r %*% t(U_r) + sigIp_r)
 eigen(Sigma_0)$values
 
 # Y <- rcwis(n, Sigma_0_c)
-Y <- rcomplex_wishart(n, P, Sigma = .5*Sigma_0_c)
+Y <- rcomplex_wishart(n, Sigma = .5*Sigma_0_c)
 Y_r <- complex_to_real(Y)
 
 trY <- Re(sum(diag(Y)))
@@ -127,7 +127,7 @@ col1_Is <- matrix(NA, P, its)
 set.seed(20032025)
 for (i in 1:its) {
     A <- rcwis(n, diag(P))
-    # A <- rcomplex_wishart(n, P, Sigma = .5*diag(P))
+    # A <- rcomplex_wishart(n, Sigma = .5*diag(P))
     trace_Is[i] <- sum(diag(A))
     col1_Is[, i] <- A[, 1]
 }
@@ -148,7 +148,7 @@ col1_Sigma0s <- matrix(NA, P, its)
 set.seed(20032025)
 for (i in 1:its) {
     A <- rcwis(n, Sigma_0)
-    # A <- rcomplex_wishart(n, P, Sigma = .5*Sigma_0)
+    # A <- rcomplex_wishart(n, Sigma = .5*Sigma_0)
     trace_Sigma0s[i] <- sum(diag(A))
     col1_Sigma0s[, i] <- A[, 1]
 }

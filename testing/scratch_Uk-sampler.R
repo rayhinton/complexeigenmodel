@@ -76,7 +76,7 @@ Uk0s <- array(NA, c(P, d, K))
 # Gammak0 <- sigmak2 * ( Uk0 %*% Lambdak %*% t(Conj(Uk0)) + diag(P) )
 
 set.seed(22042025)
-# Yk <- rcomplex_wishart(nk, P, Gammak0)
+# Yk <- rcomplex_wishart(nk, Gammak0)
 Yks <- array(NA, c(P, P, K))
 data_list <- list()
 
@@ -90,7 +90,7 @@ for (k in 1:K) {
     Gammak0 <- sigmak2s[k] * 
         ( Uk0s[, , k] %*% Lambdaks[, , k] %*% t(Conj(Uk0s[, , k])) + diag(P) )
     
-    Yks[, , k] <- rcomplex_wishart(nks[k], P, Gammak0)
+    Yks[, , k] <- rcomplex_wishart(nks[k], Gammak0)
     data_list[[k]] <- Yks[, , k]
     
     # random initialization for each

@@ -69,7 +69,7 @@ data_list <- list()
 for (k in 1:K) {
     Gammak0 <- sigmak20s[k] * (Uk0s[, , k] %*% diag(Lambdak0s[, k]) %*% 
                                    t(Conj(Uk0s[, , k])) + diag(P))
-    data_list[[k]] <- rcomplex_wishart(n_k[k], P, Gammak0)
+    data_list[[k]] <- rcomplex_wishart(n_k[k], Gammak0)
 }
 
 # initialize arrays to store posterior samples ----------------------------

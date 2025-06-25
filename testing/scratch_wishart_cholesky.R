@@ -104,7 +104,7 @@ norm(diag(n, nrow = m) - avgA, "F")
 
 microbenchmark::microbenchmark(
     alt_rcomplex_wishart(n, diag(m)),
-    rcomplex_wishart(n, m, diag(m)),
+    rcomplex_wishart(n, diag(m)),
     times = 1000
 )
 
@@ -139,6 +139,6 @@ cbind(n*eigen(A)$values, eigen(avgW)$values)
 
 microbenchmark::microbenchmark(
     alt_rcomplex_wishart(n, A),
-    rcomplex_wishart(n, m, A),
+    rcomplex_wishart(n, A),
     times = 1000
 )

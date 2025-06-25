@@ -433,7 +433,7 @@ Ur %*% t(Ur)
 p <- 4
 
 set.seed(4062025)
-V <- rcomplex_wishart(p+1, p, diag(p))
+V <- rcomplex_wishart(p+1, diag(p))
 V <- V / Re(sum(diag(V)))
 
 nu <- 10
@@ -441,7 +441,7 @@ nu <- 10
 Us <- array(NA, c(p, p, 1e5))
 
 for(i in 1:1e5) {
-    Uu <- rcomplex_wishart(nu, p, V)
+    Uu <- rcomplex_wishart(nu, V)
     Us[, , i] <- Uu / Re(sum(diag(Uu)))
 }
 

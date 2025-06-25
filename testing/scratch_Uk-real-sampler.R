@@ -88,7 +88,7 @@ Uk0s_evecs <- array(NA, c(P, d, K))
 # cbind(Uk0[, 1], Uk0_eigenvectors[, 1])
 
 set.seed(22042025)
-# Yk <- rcomplex_wishart(nk, P, Gammak0)
+# Yk <- rcomplex_wishart(nk, Gammak0)
 Yks <- array(NA, c(P, P, K))
 
 Uks <- array(NA, c(P, d, K, its))
@@ -102,7 +102,7 @@ for (k in 1:K) {
     Gammak0 <- sigmak2s[k] * 
         ( Uk0s[, , k] %*% Lambdaks[, , k] %*% t(Conj(Uk0s[, , k])) + diag(P) )
     
-    # Yks[, , k] <- rcomplex_wishart(nks[k], P, Gammak0)
+    # Yks[, , k] <- rcomplex_wishart(nks[k], Gammak0)
     Yks[, , k] <- rWishart(1, nks[k], Gammak0)[, , 1]
     
     # random initialization for each

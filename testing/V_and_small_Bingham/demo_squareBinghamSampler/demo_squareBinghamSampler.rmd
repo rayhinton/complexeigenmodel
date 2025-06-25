@@ -297,7 +297,7 @@ H <- diag(seq(P*2, 1, length.out = P))
 # H <- diag(P:1)
 
 # G <- rWishart(1, P + 1, diag(P))[, , 1]
-G <- rcomplex_wishart(P+1, P, Sigma = diag(P))
+G <- rcomplex_wishart(P+1, Sigma = diag(P))
 A <- diag(eigen(G)$values)
 V <- eigen(G)$vectors
 
@@ -306,7 +306,7 @@ Us_sqB <- array(NA, c(P, P, its))
 Covs_sqB <- array(NA, c(P, P, its))
 
 # initialize the first entry as a random unitary matrix
-Us_sqB[, , 1] <- rcomplex_wishart(P+1, P, Sigma = diag(P)) |> qr() |> qr.Q()
+Us_sqB[, , 1] <- rcomplex_wishart(P+1, Sigma = diag(P)) |> qr() |> qr.Q()
 
 # perform sampling
 set.seed(17042025) 
@@ -350,7 +350,7 @@ H <- diag(seq(P*2, 1, length.out = P))
 # H <- diag(P:1)
 
 # G <- rWishart(1, P + 1, diag(P))[, , 1]
-G <- rcomplex_wishart(P+1, P, Sigma = diag(P))
+G <- rcomplex_wishart(P+1, Sigma = diag(P))
 A <- diag(eigen(G)$values)
 V <- eigen(G)$vectors
 
@@ -359,7 +359,7 @@ Us_sqB <- array(NA, c(P, P, its))
 Covs_sqB <- array(NA, c(P, P, its))
 
 # initialize the first entry as a random unitary matrix
-Us_sqB[, , 1] <- rcomplex_wishart(P+1, P, Sigma = diag(P)) |> qr() |> qr.Q()
+Us_sqB[, , 1] <- rcomplex_wishart(P+1, Sigma = diag(P)) |> qr() |> qr.Q()
 
 # perform sampling
 set.seed(17042025) 
@@ -404,7 +404,7 @@ H <- diag(seq(P*2, 1, length.out = P))
 # H <- diag(P:1)
 
 # G <- rWishart(1, P + 1, diag(P))[, , 1]
-G <- rcomplex_wishart(P+1, P, Sigma = diag(P))
+G <- rcomplex_wishart(P+1, Sigma = diag(P))
 A <- diag(eigen(G)$values)
 V <- eigen(G)$vectors
 
@@ -413,7 +413,7 @@ Us_sqB <- array(NA, c(P, P, its))
 Covs_sqB <- array(NA, c(P, P, its))
 
 # initialize the first entry as a random unitary matrix
-Us_sqB[, , 1] <- rcomplex_wishart(P+1, P, Sigma = diag(P)) |> qr() |> qr.Q()
+Us_sqB[, , 1] <- rcomplex_wishart(P+1, Sigma = diag(P)) |> qr() |> qr.Q()
 
 # perform sampling
 set.seed(17042025) 
@@ -460,7 +460,7 @@ H <- diag(seq(d*2, 1, length.out = d))
 # H <- diag(P:1)
 
 # G <- rWishart(1, P + 1, diag(P))[, , 1]
-G <- rcomplex_wishart(P+1, P, Sigma = diag(P))
+G <- rcomplex_wishart(P+1, Sigma = diag(P))
 A <- diag(eigen(G)$values)
 V <- eigen(G)$vectors
 
