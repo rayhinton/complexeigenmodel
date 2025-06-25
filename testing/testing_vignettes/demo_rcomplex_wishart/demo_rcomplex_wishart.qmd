@@ -1,0 +1,221 @@
+---
+title: "Complex Wishart sampling"
+author: "Ray Hinton"
+format: pdf
+editor: visual
+---
+
+```{r}
+#| include: false
+
+library(microbenchmark)
+
+source("~/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/testing/scratch_rcomplex_wishart.R")
+```
+
+# Expectations
+
+```{r}
+#| label: ex-avg-noChol
+#| include: false
+
+df <- 15
+p <- 4
+
+Sigma <- rscnorm(p*p) |> matrix(p, p)
+Sigma <- Sigma %*% t(Conj(Sigma))
+
+W <- rcomplex_wishart(df, Sigma, useEigenR = TRUE, byCholesky = TRUE)
+
+its <- 1e4
+
+Ws <- array(NA, c(p, p, its))
+for (s in 1:its) {
+    Ws[, , s] <- rcomplex_wishart(df, Sigma, useEigenR = TRUE, 
+                                  byCholesky = FALSE)
+}
+
+avgW <- apply(Ws, c(1, 2), mean)
+```
+
+In the following two examples, the sample mean and true mean are compared when two different methods are used to generate complex Wishart matrices.
+
+First, the method using a product of matrices is shown. The true mean and sample mean are close in Frobenius distance, and their entries appear similar.
+
+```{r}
+#| label: ex-avg-noChol-results
+# Frobenius distance
+norm(df*Sigma - avgW, "F")
+# true mean
+round(df*Sigma, 3)
+# sample mean
+round(avgW, 3)
+```
+
+```{r}
+#| label: ex-avg-Chol
+#| include: false
+df <- 15
+p <- 4
+
+W <- rcomplex_wishart(df, Sigma, useEigenR = TRUE, byCholesky = TRUE)
+
+its <- 1e4
+
+Ws <- array(NA, c(p, p, its))
+for (s in 1:its) {
+    Ws[, , s] <- rcomplex_wishart(df, Sigma, useEigenR = TRUE, 
+                                  byCholesky = TRUE)
+}
+
+avgW <- apply(Ws, c(1, 2), mean)
+```
+
+
+Next, the method based on the Cholesky decomposition is shown. Again, the true means and sample means are similar.
+
+```{r}
+#| label: ex-avg-Chol-results
+# Frobenius distance
+norm(df*Sigma - avgW, "F")
+# true mean
+round(df*Sigma, 3)
+# sample mean
+round(avgW, 3)
+```
+
+
+# Speed
+
+There are two parts of the algorithm that can be slow. First, the matrix square root of the $\Sigma$ parameter is needed. This can be computed just using the eigendecomposition via `eigen`. Alternatively, `EigenR::Eigen_sqrt` is faster in some cases. Second, sampling the Cholesky decomposition of the complex Wishart matrix is generally faster as the degrees of freedom increases.
+
+For small matrices and low degrees of freedom, finding $\Sigma^{1/2}$ with `EigenR::Eigen_sqrt` greatly speeds up the sampler. Using the Cholesky decomposition sampling technique does not make as much of a difference.
+
+The following times are in microseconds for `p = 8`.
+
+```{r}
+#| cache: true
+
+df <- 100
+p <- 8
+
+Sigma <- rcomplex_wishart(p + 1, diag(p))
+
+mb_res <- microbenchmark(
+    rcomplex_wishart(df, Sigma, useEigenR = FALSE, byCholesky = FALSE),
+    rcomplex_wishart(df, Sigma, useEigenR = FALSE, byCholesky = TRUE),
+    rcomplex_wishart(df, Sigma, useEigenR = TRUE, byCholesky = FALSE),
+    rcomplex_wishart(df, Sigma, useEigenR = TRUE, byCholesky = TRUE),
+    times = 1000
+) |> summary()
+
+mb_res$expr <- c("FALSE, FALSE", "FALSE, TRUE", "TRUE, FALSE", "TRUE, TRUE")
+names(mb_res)[1] <- c("EigenR, byChol")
+
+cat(paste0("df = ", df, ", p = ", p))
+knitr::kable(mb_res, digits = 3)
+```
+
+With a larger degrees of freedom, `df = 1000`, using the Cholesky decomposition also results in a speed up, regardless of how the matrix square root is found.
+
+```{r}
+#| echo: false
+#| cache: true
+
+df <- 1000
+p <- 8
+
+Sigma <- rcomplex_wishart(p + 1, diag(p))
+
+mb_res <- microbenchmark(
+    rcomplex_wishart(df, Sigma, useEigenR = FALSE, byCholesky = FALSE),
+    rcomplex_wishart(df, Sigma, useEigenR = FALSE, byCholesky = TRUE),
+    rcomplex_wishart(df, Sigma, useEigenR = TRUE, byCholesky = FALSE),
+    rcomplex_wishart(df, Sigma, useEigenR = TRUE, byCholesky = TRUE),
+    times = 1000
+) |> summary()
+
+mb_res$expr <- c("FALSE, FALSE", "FALSE, TRUE", "TRUE, FALSE", "TRUE, TRUE")
+names(mb_res)[1] <- c("EigenR, byChol")
+
+cat(paste0("df = ", df, ", p = ", p))
+knitr::kable(mb_res, digits = 3)
+```
+
+With larger matrices, `p = 64` below, the `EigenR::Eigen_sqrt` function is slower than using `eigen` to compute the matrix square root. Using the Cholesky decomposition is faster in either case.
+
+The following are in milliseconds.
+
+```{r}
+#| echo: false
+#| cache: true
+
+df <- 100
+p <- 64
+
+Sigma <- rcomplex_wishart(p + 1, diag(p))
+
+mb_res <- microbenchmark(
+    rcomplex_wishart(df, Sigma, useEigenR = FALSE, byCholesky = FALSE),
+    rcomplex_wishart(df, Sigma, useEigenR = FALSE, byCholesky = TRUE),
+    rcomplex_wishart(df, Sigma, useEigenR = TRUE, byCholesky = FALSE),
+    rcomplex_wishart(df, Sigma, useEigenR = TRUE, byCholesky = TRUE),
+    times = 100
+) |> summary()
+
+mb_res$expr <- c("FALSE, FALSE", "FALSE, TRUE", "TRUE, FALSE", "TRUE, TRUE")
+names(mb_res)[1] <- c("EigenR, byChol")
+
+cat(paste0("df = ", df, ", p = ", p))
+knitr::kable(mb_res, digits = 3)
+```
+
+```{r}
+#| echo: false
+#| cache: true
+
+df <- 1000
+p <- 64
+
+Sigma <- rcomplex_wishart(p + 1, diag(p))
+
+mb_res <- microbenchmark(
+    rcomplex_wishart(df, Sigma, useEigenR = FALSE, byCholesky = FALSE),
+    rcomplex_wishart(df, Sigma, useEigenR = FALSE, byCholesky = TRUE),
+    rcomplex_wishart(df, Sigma, useEigenR = TRUE, byCholesky = FALSE),
+    rcomplex_wishart(df, Sigma, useEigenR = TRUE, byCholesky = TRUE),
+    times = 100
+) |> summary()
+
+mb_res$expr <- c("FALSE, FALSE", "FALSE, TRUE", "TRUE, FALSE", "TRUE, TRUE")
+names(mb_res)[1] <- c("EigenR, byChol")
+
+cat(paste0("df = ", df, ", p = ", p))
+knitr::kable(mb_res, digits = 3)
+```
+
+With even higher degrees of freedom, the Cholesky decomposition is clearly faster.
+
+```{r}
+#| echo: false
+#| cache: true
+
+df <- 10000
+p <- 64
+
+Sigma <- rcomplex_wishart(p + 1, diag(p))
+
+mb_res <- microbenchmark(
+    rcomplex_wishart(df, Sigma, useEigenR = FALSE, byCholesky = FALSE),
+    rcomplex_wishart(df, Sigma, useEigenR = FALSE, byCholesky = TRUE),
+    rcomplex_wishart(df, Sigma, useEigenR = TRUE, byCholesky = FALSE),
+    rcomplex_wishart(df, Sigma, useEigenR = TRUE, byCholesky = TRUE),
+    times = 100
+) |> summary()
+
+mb_res$expr <- c("FALSE, FALSE", "FALSE, TRUE", "TRUE, FALSE", "TRUE, TRUE")
+names(mb_res)[1] <- c("EigenR, byChol")
+
+cat(paste0("df = ", df, ", p = ", p))
+knitr::kable(mb_res, digits = 3)
+```
