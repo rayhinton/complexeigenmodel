@@ -184,7 +184,7 @@ genData_Uk_CMACG <- function(P, d, n_k, tracenorm, customEvals, sigmaevals,
     
     # sigmak02: random positive scalar
     # Jeffreys prior would use lower values of shape and rate, to approach 1/x
-    sigmak02 <- rgamma(1, shape = 1, rate = 1)
+    sigmak02 <- rgamma(1, shape = 1, rate = 1/100)
     
     # Yk ~ CW(n_k, sigmak02 * (Uk0 %*% Lambdak0 %*% t(Conj(Uk0))) )
     Gamma0 <- sigmak02 * (Uk0 %*% Lambdak0 %*% t(Conj(Uk0)) + diag(P))
@@ -494,7 +494,7 @@ make_mcmclist <- function(dist_vals, S_its, burnin, thinBy) {
 # data parameters
 P <- 8
 d <- 4
-n_k <- 1000
+n_k <- 500
 
 tracenorm <- TRUE
 customEvals <- FALSE
@@ -509,9 +509,9 @@ sortLambda <- TRUE
 # sampling parameters
 numchains <- 1
 S_its <- 1e5
-burnin <- 33000
-thinBy <- 5
-tau_U <- .01 # SD of the entries of the Cayley transformation
+burnin <- .5
+thinBy <- 10
+tau_U <- .005 # SD of the entries of the Cayley transformation
 
 doCayleyZeros <- FALSE
 CayleyZeroProb <- 0.75
@@ -519,7 +519,10 @@ CayleyZeroProb <- 0.75
 # make data and do sampling -----------------------------------------------
 
 datastuff <- genData_Uk_CMACG(P, d, n_k, tracenorm, customEvals, sigmaevals, 
-                              sortLambda, parameterseed, dataseed)
+                              # sortLambda, parameterseed, dataseed)
+                              sortLambda, parameterseed = 8, dataseed)
+datastuff$param_list$Lambda_ks
+datastuff$param_list$sigma_k2s
 
 Ukest <- eigen(datastuff$data_list[[1]])$vectors[, 1:d]
 

@@ -64,3 +64,10 @@ microbenchmark::microbenchmark(
     rFTCW(diag(64), 2000, 64),
     times = 1000
 )
+
+
+# if else test ------------------------------------------------------------
+
+
+if (2 > 1) rrr <- 1 else rrr <- 0
+print(rrr)

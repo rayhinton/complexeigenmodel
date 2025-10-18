@@ -47,8 +47,8 @@ rCMACG <- function(nrow, ncol, Sigma) {
     return(Z %*% solve(sqrtZHZ))
 }
 
-rFTCW <- function(Sigma, n, a) {
-    W <- rcomplex_wishart(n, Sigma)
+rFTCW <- function(Sigma, n, a, useEigenR = FALSE, byCholesky = FALSE) {
+    W <- rcomplex_wishart(n, Sigma, useEigenR, byCholesky)
     Y <- a * W / Re(sum(diag(W)))
     return(Y)
 }
@@ -64,9 +64,9 @@ logdet <- function(X) {
 P <- 64
 d <- 4
 K <- 100
-S_its <- 20000
+S_its <- 1e5
 # tuning parameter for the proposal distribution
-n_Sig <- P+10000
+n_Sig <- P+100000
 # for P = 8, and K = 10, P + 250 and P + 500 seemed to give acc. rates around 18% and 33%, respectively.
 # for K = 100, increased to P+2000 (~.22 acc. rate)
 
@@ -112,9 +112,24 @@ for (k in 1:K) {
     Uks[, , k] <- rCMACG(P, d, Sigma_0)
 }
 
+# estimate Sigma from the data --------------------------------------------
+
+MUk <- apply(Uks, c(1, 2), sum)
+
+Uh <- MUk %*% EigenR::Eigen_sqrt( solve(t(Conj(MUk)) %*% MUk) )
+Vh <- cbind(Uh, MASS::Null(Uh))
+
+Lamh <- diag( rep(c(2, 1), times = c(d, P-d)) )
+Sigmah <- Vh %*% Lamh %*% t(Conj(Vh))
+Sigmah <- P * Sigmah / Re(sum(diag(Sigmah)))
+diag(Sigmah) <- Re(diag(Sigmah))
+
+# begin sampling ----------------------------------------------------------
+
 # initialize array to store samples
 Sigma_S <- array(NA, c(P, P, S_its))
 Sigma_S[, , 1] <- rFTCW(diag(P), P+1, P)
+# Sigma_S[, , 1] <- Sigmah
 Sigmas <- Sigma_S[, , 1]
 invSigmas <- solve(Sigmas)
 accCount <- 0
@@ -127,7 +142,7 @@ for (s in 2:S_its) {
     
     if(s %% (S_its/10) == 0) print(paste0("s = ", s))
     
-    Sigmap <- rFTCW(Sigmas, n_Sig, P)
+    Sigmap <- rFTCW(Sigmas, n_Sig, P, byCholesky = TRUE)
     invSigmap <- solve(Sigmap)
         
     # sumlog_p
@@ -167,7 +182,7 @@ accCount/S_its
 
 avgSigma <- apply(Sigma_S[, , itsKeep], c(1, 2), mean)
 
-cbind(avgSigma[, 1], Sigma_0[, 1])
+cbind(avgSigma[, 1], Sigma_0[, 1]) |> View()
 
 norm(avgSigma - Sigma_0, "F")
 
@@ -178,23 +193,44 @@ for (s in 1:S_its) {
     d_to_avgSigma[s] <- norm(avgSigma - Sigma_S[, , s], "F")
 }
 
+dev.new()
+pdf("~/rpdf.pdf", width = 8, height = 6)
 plot(d_to_avgSigma, type = "l", ylab = "Frob. dist.",
-     main = "Frobenius distance of samples to mean Sigma")
+     main = "Frobenius distance of samples to mean Sigma",
+     cex = 2)
+dev.off()
 
 quantile(d_to_avgSigma[itsKeep], c(.025, .5, .975))
 
 # trace plot of diagonals -------------------------------------------------
 
-diagi <- 1
+diagis <- c(1, 21, 42, 64)
+diag_df <- matrix(NA, 4, 5)
 
-main_expr_S <- expression(paste(Sigma[11], " trace plot"))
+dev.new()
+pdf("~/rpdf.pdf", width = 8, height = 6)
+par(mfrow = c(2, 2))
+for (i in 1:4) { 
+    diagi <- diagis[i]
+    
+    main_expr_S <- bquote(Sigma[.(diagi)*","*.(diagi)] ~ "trace plot")
+    
+    ylab_S <- bquote(Sigma[.(diagi)*","*.(diagi)])
+    
+    plot(Re(Sigma_S[diagi, diagi, ]), type = "l",
+         ylab = ylab_S, 
+         main = main_expr_S,
+         cex = 2)
+    
+    diag_df[i, ] <- c(
+        diagi,
+        unname(quantile(Re(Sigma_S[diagi, diagi, itsKeep]), c(.025, .975))),
+        mean(Re(Sigma_S[diagi, diagi, itsKeep])),
+        Re(Sigma_0[diagi, diagi])
+    )
+} 
+par(mfrow = c(1, 1))
+dev.off()
 
-ylab_S <- bquote(Sigma[.(diagi) * .(diagi)])
-
-plot(Re(Sigma_S[diagi, diagi, ]), type = "l",
-     ylab = ylab_S, 
-     main = main_expr_S)
-
-quantile(Re(Sigma_S[diagi, diagi, itsKeep]), c(.025, .5, .975))
-mean(Re(Sigma_S[diagi, diagi, itsKeep]))
-Re(Sigma_0[diagi, diagi])
+colnames(diag_df) <- c("i", ".025", ".975", "mean", "true")
+diag_df

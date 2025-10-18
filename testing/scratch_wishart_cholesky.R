@@ -142,3 +142,15 @@ microbenchmark::microbenchmark(
     rcomplex_wishart(n, A),
     times = 1000
 )
+
+
+
+# test Hermitian solution -------------------------------------------------
+
+W <- rcomplex_wishart(5, diag(4), byCholesky = TRUE)
+isSymmetric(W)
+
+Wavg <- (W + t(Conj(W))) / 2
+norm(W - Wavg, "F")
+max(abs(W - Wavg))
+cbind(W[, 1], Wavg[, 1])
