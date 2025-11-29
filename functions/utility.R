@@ -60,6 +60,24 @@ rFTCW <- function(Sigma, n, a, useEigenR = FALSE, byCholesky = FALSE) {
     return(Y)
 }
 
+# rMACG ------------------------------------------------------------------
+
+rMACG <- function(nrow, ncol, Sigma) {
+    # simulate X ~ MN(0, I_P, I_d),
+    # calculate Z by transforming X with Cholesky decomposition of Sigma0
+    # let H_Z be orthogonal portion of polar decomposition of Z
+    X <- matrix(rnorm(nrow*ncol), nrow, ncol)
+    
+    # check if this is the upper or lower triang version
+    # want the matrix such that Sigma = cholSigma %*% t(Conj(cholSigma))
+    # Eigen_chol returns the upper triangular portion
+    cholSigma <- EigenR::Eigen_chol(Sigma)
+    
+    Z <- t(cholSigma) %*% X 
+    sqrtZHZ <- EigenR::Eigen_sqrt( t(Z) %*% Z )
+    return(Z %*% solve(sqrtZHZ))
+}
+
 # rCMACG ------------------------------------------------------------------
 
 rCMACG <- function(nrow, ncol, Sigma) {

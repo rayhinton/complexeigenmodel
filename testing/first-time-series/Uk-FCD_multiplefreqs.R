@@ -6,6 +6,15 @@ source("/home/rayhinton/Documents/PhD_research/RA_time-series/code-experiments/c
 source("/home/rayhinton/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/functions/matrix_distances.R")
 source("/home/rayhinton/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/testing/first-time-series/geoSS.R")
 
+closest_semiorth <- function(U) {
+ 
+    A <- Re(U)
+    svd_result <- svd(A)
+    V <- svd_result$u %*% t(svd_result$v)
+    
+    return(V)
+}
+
 sdf_ar2 <- function(omega, phis, sigma2 = 1) {
     phi1 <- phis[1]
     phi2 <- phis[2]
@@ -30,23 +39,21 @@ unnorm_logPDF <- function(x, tau2, ajk, mu, N, logscale = FALSE) {
     }
 }
 
-logd_Uk <- function(Us, Sigmas, sigma_k2, result_Lambdas, data_list_w, 
+logd_Uk <- function(Us, lw, invSigmas, sigma_k2, result_Lambdas, data_list_w, 
                     num_freqs, k) {
     
-    invSigmas <- solve(Sigmas)
-    traces <- 0
+    # invSigmas <- solve(Sigmas)
     
     # calculate traces and other terms, for the MH acceptance ratio
-    for (l in 1:num_freqs) {
-        Skl <- data_list_w[[l]][[k]]
-        lambdakl <- result_Lambdas[, k, l]
-        Omegakl <- diag(lambdakl / (1 + lambdakl))
-        
-        # terms <- Re(sum(diag( Us %*% Omegakl %*% t(Conj(Us)) %*% Skl )))
-        terms <- Re(sum(Conj(Us) * (Skl %*% Us %*% Omegakl)))
-        
-        traces <- traces + terms
-    } # end of summing over frequencies
+    # for (l in 1:num_freqs) {
+    Skl <- data_list_w[[lw]][[k]]
+    lambdakl <- result_Lambdas[, k, lw]
+    Omegakl <- diag(lambdakl / (1 + lambdakl))
+    
+    # trace <- Re(sum(diag( Us %*% Omegakl %*% t(Conj(Us)) %*% Skl )))
+    traces <- Re(sum(Conj(Us) * (Skl %*% Us %*% Omegakl)))
+    
+    # } # end of summing over frequencies
     
     logdets <- log(Re(EigenR::Eigen_det( t(Conj(Us)) %*% invSigmas %*% Us )))
     
@@ -69,24 +76,41 @@ K <- 2
 Tt <- 1024 # length of time series
 LL <- round(sqrt(Tt))
 
+num_freqs <- Tt/2 - 1
+
 # Geodesic slice sampling parameters
 w <- 10
 m <- 2
 
-tau_Uk <- rep(.0025, K)
+# tau_Uk <- rep(.1, K)
+tau_Ukl <- array(0.1, c(K, num_freqs))
+num_tau_check <- 20
+show_tau_tune_summ <- TRUE
 doCayleyZeros <- FALSE
 CayleyZeroProb <- 0.5
 
-num_freqs <- Tt/2 - 2
-
 omegaw <- seq(1/Tt, by = 1/Tt, length.out = num_freqs)
 
-gibbsIts <- 1000
+gibbsIts <- 3000
+burnin <- 0.5
+gibbsPrint <- 100
 
-tau2_Lambda <- 0.5
 # hyperparameters to the prior for tau2
 tau2_a <- 1
 tau2_b <- 1
+
+### adapting MH tuning parameters
+# what s index is the maximum burnin iteration?
+burninS <- floor(gibbsIts * burnin)
+# how often should the adaptation happen?
+tau_numin <- floor(burninS / (num_tau_check))
+# at which s iterations should the adaptation happen?
+tau_s_check <- seq(tau_numin, burninS, tau_numin)
+
+# adaptive version
+# tau_s_check <- seq(50, gibbsIts, 50)
+
+# generate some true parameters -------------------------------------------
 
 set.seed(parseed)
 sigmak02 <- c(5, 10)
@@ -97,9 +121,21 @@ Sigma0 <- rFTCW(diag(P), P+1, P)
 # rCMACG <- function(nrow, ncol, Sigma) {
 U_k0 <- array(NA, c(P, d, K))
 for (k in 1:K) {
-    U <- qr.Q(qr(matrix(rnorm(P*d), ncol = d)))
-    U_k0[, , k] <- U
+    # U <- qr.Q(qr(matrix(rnorm(P*d), ncol = d)))
+    # U_k0[, , k] <- U
+    
+    U_k0[, , k] <- rCMACG(P, d, Sigma0) |> closest_semiorth()
 }
+
+# avg_Uk0 <- apply(U_k0, c(1, 2), mean)
+# avg_Uk0 <- avg_Uk0 %*% 
+#     solve( EigenR::Eigen_sqrt( t(Conj(avg_Uk0)) %*% avg_Uk0 ) )
+# 
+# avg_Uk0_perp <- (qr(avg_Uk0, complete = TRUE) |> 
+#                      qr.Q(complete = TRUE))[, (d+1):P]
+# 
+# V_Sigma0 <- cbind(avg_Uk0, avg_Uk0_perp)
+# Sigma0 <- V_Sigma0 %*% diag(P*(P:1) / sum(P:1)) %*% t(Conj(V_Sigma0))
 
 # AR(2) parameters
 # being put into an array columnwise
@@ -126,7 +162,6 @@ for (w in 1:num_freqs) {
 # simulate time series ----------------------------------------------------
 TS_data <- list()
 SDMests <- list()
-kernel_SDMests <- list()
 
 len_freq <- Tt/2
 
@@ -160,11 +195,6 @@ for (k in 1:K) {
     }
     
     SDMests[[k]] <- F_tp1 * Tt
-
-    kernel_SDMests[[k]] <- 
-        # astsa::mvspec(Yts, kernel("modified.daniell", c(8,8,8)), 
-        astsa::mvspec(Yts, kernel("fejer", 100, 6), 
-                      log = 'no', taper = .5, plot = FALSE)
 }
 
 # Data (scaled SDM estimates) ---------------------------------------------
@@ -208,8 +238,10 @@ param_list_w0 <- list(
 
 # initialize arrays -------------------------------------------------------
 
-U_ks_all <- array(NA, c(P, d, K, gibbsIts))
-U_ks_all[, , , 1] <- U_k0
+# U_ks_all <- array(NA, c(P, d, K, gibbsIts))
+# U_ks_all[, , , 1] <- U_k0
+U_kls_all <- array(NA, c(P, d, K, num_freqs, gibbsIts))
+U_kls_all[, , , , 1] <- U_k0
 
 Lambdak_w_s <- array(NA, c(d, K, num_freqs, gibbsIts))
 Lambdak_w_s[, , , 1] <- Lambdak0_w
@@ -220,44 +252,43 @@ taujk2_s[, , 1] <- 1/rgamma(d*K, tau2_a, rate = tau2_b)
 zetajk2_s <- array(NA, c(d, K, gibbsIts))
 zetajk2_s[, , 1] <- 1/rgamma(d*K, tau2_a, rate = tau2_b)
 
-accCount_s <- array(NA, c(K, gibbsIts))
+accCount_s <- array(NA, c(K, num_freqs, gibbsIts))
+accCount_s[, , 1] <- TRUE
+
+# start cluster -----------------------------------------------------------
+
+# library(foreach)
+# library(doParallel)
+# 
+# n_cores <- 2
+# cluster <- makeCluster(n_cores)
+# registerDoParallel(cluster)
 
 # sampling ----------------------------------------------------------------
 
 {
 starttime <- Sys.time()
 for (s in 2:gibbsIts) {
-    
-    # a temporary matrix with the previous sample
-    U_ks <- U_ks_all[, , , s-1]
+    if (s %% gibbsPrint == 0) cat(paste0(s, ": ", Sys.time(), "\n"))
+        
+    # a temporary matrices with the previous samples
+    U_kls <- U_kls_all[, , , , s-1]
+    result_Lambdas <- Lambdak_w_s[, , , s-1]
     
     ##### Lambda sampling
     
-    if (s %% 25 == 0) cat(paste0(s, ": ", Sys.time(), "\n"))
-        
-    #param_list_w0$Lambda_ks <-
-    #    Lambdak_gibbs_densCovar(data_list_w[[1]], param_list_w0, 
-    #                            doOrdered = TRUE)
-    
-    # sampling for lambda, omega_1: need new code, with a Gamma distribution
-    # and in fact, we're sampling xijk, for omega_1, so be sure to do the transformation
-    
-    result_Lambdas <- Lambdak_w_s[, , , s-1]
-    # result_Lambdas[, , c(num_freqs)] <- Lambdak0_w[, , c(num_freqs)]
-    
     # section for frequency l = 1
-    # where do I get the data? in data_list_w, it is organized by frequency
     for (k in 1:K) {
         LSkw <- data_list_w[[1]][[k]]
-        Ukw <- U_ks[, , k]
+        Ukl <- U_kls[, , k, 1]
         
         # for each Lambdak value, j
         for (j in sample(d)) {
             # xi_jk has a truncated Gamma(nk, tjk) distribution (shape, rate), 
             # and tjk is a temporary parameter defined as follows.
-            # (note we take the Real part, since the quadratic form should be real, 
+            # (take the Real part, since the quadratic form should be real, 
             # but may have a small complex part due to numerical issues.)
-            tjk <- Re( t(Conj(Ukw[, j])) %*% LSkw %*% Ukw[, j] ) / sigmak02[k]
+            tjk <- Re( t(Conj(Ukl[, j])) %*% LSkw %*% Ukl[, j] ) / sigmak02[k]
             
             ##### sample from a truncated Gamma distribution
             # lower and upper bounds for truncating the Gamma distribution
@@ -280,19 +311,15 @@ for (s in 2:gibbsIts) {
         }
     }
     
-    for (w in sample(2:(num_freqs-1)) ) {
+    for ( w in sample(2:(num_freqs-1)) ) {
         for (k in 1:K) {
-            # TODO need to change this to be the actual updated values for a particular frequency.
-            # for now, I am not sampling them, so they are constant and do not need proper indexing.
-            # Uw1 <- param_list_w1$U_ks[, , k]
-            Uw1 <- U_ks[, , k]
+            Ukw <- U_kls[, , k, w]
             Dkw1 <- data_list_w[[w]][[k]]
             
             for (j in sample(d)) {
-                ajk <- t(Conj(Uw1[, j])) %*% Dkw1 %*% Uw1[, j] / 
+                ajk <- t(Conj(Ukw[, j])) %*% Dkw1 %*% Ukw[, j] / 
                     sigmak02[k]
-                # should be strictly real - this is done in the existing Lambda
-                # FCD sampler.
+                # should be strictly real
                 ajk <- Re(ajk)
                 
                 # 2nd order RW, previous and next neighbors
@@ -320,7 +347,7 @@ for (s in 2:gibbsIts) {
     ##### for the last frequency, l = num_freq
     # 1st order RW
     for (k in 1:K) {
-        Uw1 <- U_ks[, , k]
+        Uw1 <- U_kls[, , k, num_freqs]
         Dkw1 <- data_list_w[[num_freqs]][[k]]
 
         for (j in sample(d)) {
@@ -348,7 +375,7 @@ for (s in 2:gibbsIts) {
     # save the sampled Lambdas    
     Lambdak_w_s[, , , s] <- result_Lambdas
         
-    # sample the separate taujk2 parameters
+    # sample the separate taujk2 and zetajk2 parameters
     for (j in 1:d) {
         for (k in 1:K) {
             
@@ -390,79 +417,164 @@ for (s in 2:gibbsIts) {
     ##### Uk sampling 
     
     # before sampling
-    accCount <- rep(TRUE, K)
-    newU_ks <- array(NA, c(P, d, K))
-    
+    accCount <- array(TRUE, c(K, num_freqs))
+    newU_kls <- array(NA, c(P, d, K, num_freqs))
+
     # during sample, 1:K, 1:num_freqs
     
+    # result_list_Uk <- foreach(k = 1:K) %dopar% {
     for (k in 1:K) {
         sigma_k2 <- sigmak02[k]
         Sigmas <- Sigma0
-        
-        Us <- U_ks[, , k]
-
-        # propose U by small rotation of Us
-        Up <- Uk_MH_Cayley(Us, tau_Uk[k], doCayleyZeros, CayleyZeroProb)
-        # let Y_kl be the scaled data matrix (i.e. SDM estimate at frequency index l)
-
         invSigmas <- solve(Sigmas)
 
-        tracep <- 0
-        traces <- 0
+        # newU_k <- array(NA, c(P, d, num_freqs))
+        # accCount_k <- rep(TRUE, num_freqs)
 
         # calculate traces and other terms, for the MH acceptance ratio
         for (l in 1:num_freqs) {
+            Us <- U_kls[, , k, l]
+            
+            ### MH sampling
+            # propose U by small rotation of Us
+            Up <- Uk_MH_Cayley(Us, tau_Ukl[k, l], doCayleyZeros, CayleyZeroProb)
+            # let Skl be the scaled data matrix (i.e. SDM est. at freq. index l)
             Skl <- data_list_w[[l]][[k]]
             lambdakl <- result_Lambdas[, k, l]
             Omegakl <- diag(lambdakl / (1 + lambdakl))
 
-            # termp <- Re(sum(diag( Up %*% Omegakl %*% t(Conj(Up)) %*% Skl )))
-            # terms <- Re(sum(diag( Us %*% Omegakl %*% t(Conj(Us)) %*% Skl )))
-            termp <- Re(sum(Conj(Up) * (Skl %*% Up %*% Omegakl)))
-            terms <- Re(sum(Conj(Us) * (Skl %*% Us %*% Omegakl)))
+            # tracep <- Re(sum(diag( Up %*% Omegakl %*% t(Conj(Up)) %*% Skl )))
+            # traces <- Re(sum(diag( Us %*% Omegakl %*% t(Conj(Us)) %*% Skl )))
+            tracep <- Re(sum(Conj(Up) * (Skl %*% Up %*% Omegakl)))
+            traces <- Re(sum(Conj(Us) * (Skl %*% Us %*% Omegakl)))
 
-            tracep <- tracep + termp
-            traces <- traces + terms
+            # remaining terms
+            logdetp <- log(Re(EigenR::Eigen_det( t(Conj(Up)) %*%
+                                                     invSigmas %*% Up )))
+            logdets <- log(Re(EigenR::Eigen_det( t(Conj(Us)) %*%
+                                                     invSigmas %*% Us )))
+
+            # calculate acceptance ratio
+            logr <- tracep/sigma_k2 - P*logdetp - traces/sigma_k2 + P*logdets
+
+            # accept or reject
+            if (log(runif(1)) <= logr) {
+                newU_kls[, , k, l] <- Up
+                # newU_k[, , l] <- Up
+            } else {
+                newU_kls[, , k, l] <- Us
+                accCount[k, l] <- FALSE
+                # newU_k[, , l] <- Us
+                # accCount_k <- FALSE
+            }
+            
+            ### Geodesic slice sampling
+            # newU_kls[, , k, l] <-
+            #     geoSS(Us, logd_Uk, w = w, m = m,
+            #           invSigmas = invSigmas, lw = l, sigma_k2 = sigma_k2,
+            #           result_Lambdas = result_Lambdas,
+            #           data_list_w = data_list_w, num_freqs = num_freqs, k = k)
+            
         } # end of summing over frequencies
-
-        logdetp <- log(Re(EigenR::Eigen_det( t(Conj(Up)) %*% invSigmas %*% Up )))
-        logdets <- log(Re(EigenR::Eigen_det( t(Conj(Us)) %*% invSigmas %*% Us )))
-
-        # calculate acceptance ratio
-        logr <- tracep/sigma_k2 - P*logdetp - traces/sigma_k2 + P*logdets
-
-        # accept or reject
-        if (log(runif(1)) <= logr) {
-            newU_ks[, , k] <- Up
-        } else {
-            newU_ks[, , k] <- Us
-            accCount[k] <- FALSE
-        }
-
-        # by Geodesic slice sampling
-        # newU_ks[, , k] <-
-        #     geoSS(U_ks[, , k], logd_Uk, w = w, m = m,
-        #           Sigmas = Sigmas, sigma_k2 = sigma_k2,
-        #           result_Lambdas = result_Lambdas,
-        #           data_list_w = data_list_w, num_freqs = num_freqs, k = k)
-    
+        
+        # return this value for the dopar for loop
+        # list(U = newU_k, acc = accCount_k)
     } # end of sampling over 1:K
     
-    U_ks_all[, , , s] <- newU_ks
-    accCount_s[, s] <- accCount
+    # save sampled values from the dopar list
+    # for (k in 1:K) {
+    #     U_kls_all[, , k, , s] <- result_list_Uk[[k]]$U
+    #     accCount_s[k, , s] <- result_list_Uk[[k]]$acc
+    # }
+    
+    U_kls_all[, , , , s] <- newU_kls
+    accCount_s[, , s] <- accCount
+    
+    ### do adaptation of the Ukl MH tuning parameter
+    if (s %in% tau_s_check) {
+        cat(paste0("\n", s, ": Check for tau_Ukl adaptation\n"))
+        
+        curr_Ukl_acc_rate <-
+            apply(accCount_s[, , (s - tau_numin + 1):s], c(1, 2), mean)
+
+        # print(tau_Ukl[curr_Ukl_acc_rate == 0])
+        print(which(curr_Ukl_acc_rate == 0))
+
+        tau_Ukl[curr_Ukl_acc_rate >= .45] <-
+            tau_Ukl[curr_Ukl_acc_rate >= .45] * 2
+        tau_Ukl[curr_Ukl_acc_rate <= .15] <-
+            tau_Ukl[curr_Ukl_acc_rate <= .15] / 4
+
+        # print(tau_Ukl[curr_Ukl_acc_rate == 0])
+
+        if (show_tau_tune_summ) {
+            apply(accCount_s[, , (s - tau_numin + 1):s], c(1, 2), mean) |>
+                t() |>
+                summary() |>
+                print()
+        }
+        
+        # Roberts and Rosenthal, Adaptive Metropolis within Gibbs
+        # modify the parameter by this amount
+        # deltan <- min(0.01, (s%/%50)^(-.5))
+        # 
+        # # calculate the recent acceptance rates
+        # curr_Ukl_acc_rate <-
+        #     apply(accCount_s[, , (s - 50 + 1):s], c(1, 2), mean)
+        # 
+        # # add or subtract a factor to the log st. dev. tuning parameter
+        # tau_Ukl[curr_Ukl_acc_rate >= .234] <-
+        #     exp(log(tau_Ukl[curr_Ukl_acc_rate >= .234]) + deltan)
+        # tau_Ukl[curr_Ukl_acc_rate < .234] <-
+        #     exp(log(tau_Ukl[curr_Ukl_acc_rate < .234]) - deltan)
+        # 
+        # if (show_tau_tune_summ) {
+        #     apply(accCount_s[, , (s - 50 + 1):s], c(1, 2), mean) |>
+        #         t() |>
+        #         summary() |>
+        #         print()
+        # }
+    }
+    
 } # end of s, Gibbs sampling
 endtime <- Sys.time()
 }
 
 # evaluate ----------------------------------------------------------------
+stopCluster(cl = cluster)
 
 print(endtime - starttime)
 
-gibbsPostBurn <- round(gibbsIts/2):gibbsIts
+gibbsPostBurn <- round(gibbsIts * burnin):gibbsIts
 
-rowMeans(accCount_s[, 2:gibbsIts])
-rowMeans(accCount_s[, gibbsPostBurn])
-rowMeans(accCount_s[, 2:400])
+apply(accCount_s[, , 2:gibbsIts], c(1, 2), mean) |> t() |> summary()
+apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean) |> t() |> summary()
+
+apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean) |>
+    as.vector() |> 
+    quantile(probs = c(0, 0.025, .25, .5, .75, .975, 1))
+
+apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean) |> t() |> 
+    as.vector() |> plot()
+abline(v = num_freqs, h = c(.15, .45), lty = 2)
+
+# get matrix indices of the Ukls with certain acceptance rates
+(apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean) <= 0.15) |> 
+    which(arr.ind = TRUE)
+
+(apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean) >= 0.5) |> 
+    which(arr.ind = TRUE)
+
+# what are the indices of the Ukls with the LOWEST acc. rates?
+(as.vector(apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean)) |> 
+    order())[1:10]
+
+# what are the indices of the Ukls with the HIGHEST acc. rates?
+(as.vector(apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean)) |> 
+        order(decreasing = TRUE))[1:10]
+
+which(apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean) == 0)
+tau_Ukl[which(apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean) == 0)]
 
 plot(Lambdak_w_s[1, 1, 3, 2:gibbsIts], type = "l")
 plot(Lambdak_w_s[2, 1, 3, 2:gibbsIts], type = "l")
@@ -510,45 +622,77 @@ lines(lower_q[2, k, ], type = "l", lty = 2, , col = "red")
 lines(Lambda_means[2, k, ], , col = "red")
 lines(Lambdak0_w[2, k, ], lty = 3, , col = "red")
 
-# evaluate Uk -------------------------------------------------------------
+# look at densities for one set of Lambda values --------------------------
 
-avgUks <- array(NA, c(P, d, K))
-ds_to_avgUks <- array(NA, c(K, gibbsIts))
+k <- 1
+l <- 273
+
+for (j in 1:d) {
+    if (j == 1) {
+        plot(density(Lambdak_w_s[j, k, l, gibbsPostBurn]),
+             main = paste0("Lambda: k = ", k, ", l = ", l),
+             col = j)
+    } else {
+        lines(density(Lambdak_w_s[j, k, l, gibbsPostBurn]), col = j)
+    }
+    abline(v = c(lower_q[j, k, l], upper_q[j, k, l]), lty = 2, col = j)
+    abline(v = Lambda_means[j, k, l], col = j)
+    abline(v = Lambdak0_w[j, k, l], lty = 3, col = j)
+}
+
+legend(x = "topright", legend = c("density", "95% CI", "post. mean", "truth"),
+       lty = c(1, 2, 1, 3), lwd = 2,
+       y.intersp = 0.8)
+# distances to true Ukl0 for all Ukl --------------------------------------
+
+ds_to_true <- array(NA, c(K, num_freqs))
 
 for (k in 1:K) {
-    avgUk <- apply(U_ks_all[, , k, gibbsPostBurn],
-                   c(1, 2), mean)
-    avgUk <- avgUk %*% solve( EigenR::Eigen_sqrt( t(Conj(avgUk)) %*% avgUk ) )
-    print(fast_evec_Frob_stat(U_k0[, , k], avgUk))
-    
-    avgUks[, , k] <- avgUk
-    
-    d_to_avgUk <- rep(NA, gibbsIts)
-    for (s in 1:gibbsIts) {
-        d_to_avgUk[s] <- fast_evec_Frob_stat(U_ks_all[, , k, s], avgUk)
+    for (l in 1:num_freqs) {
+        avgUkl <- apply(U_kls_all[, , k, l, gibbsPostBurn],
+                        c(1, 2), mean)
+        avgUkl <- avgUkl %*% 
+            solve( EigenR::Eigen_sqrt( t(Conj(avgUkl)) %*% avgUkl ) )
+        
+        ds_to_true[k, l] <- fast_evec_Frob_stat(U_k0[, , k], avgUkl)
     }
-    
-    plot(d_to_avgUk, type = "l",
-         main = paste0("k = ", k))
-    
-    ds_to_avgUks[k, ] <- d_to_avgUk
 }
 
-for (k in 1:2) {
-    evec_stats <- evec_Frob_stat(U_k0[, , k], avgUks[, , k], returnMats = TRUE)
-    cat(paste0("\nk = ", k, "\n"))
-    cat(paste0("\nDistance from average Uk to true: ", 
-               round(evec_stats$dist_obj, 5)))
-    # true Uk
-    cat("\n\ntrue Uk\n")
-    print(round(evec_stats$Xopt[1:min(5, P), ], 3))
-    # average Uk
-    cat("\nAverage Uk\n")
-    print(round(evec_stats$Yopt[1:min(5, P), ], 3))
+summary(as.vector(ds_to_true))
+quantile(as.vector(ds_to_true), probs = c(0, 0.025, 0.25, 0.5, 0.75, 0.975, 1))
+sum(ds_to_true >= sqrt(2))
+which(ds_to_true >= sqrt(2), arr.ind = TRUE)
+
+which(ds_to_true <= .3, arr.ind = TRUE)
+
+which.max(ds_to_true)
+which.min(ds_to_true)
+
+# distance and trace plot for one Ukl -------------------------------------
+
+k <- 1
+l <- 273
+
+apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean)[k, l]
+
+avgUkl <- apply(U_kls_all[, , k, l, gibbsPostBurn],
+               c(1, 2), mean)
+avgUkl <- avgUkl %*% solve( EigenR::Eigen_sqrt( t(Conj(avgUkl)) %*% avgUkl ) )
+print(fast_evec_Frob_stat(U_k0[, , k], avgUkl))
+
+# avgUks[, , k] <- avgUk
+
+d_to_avgUkl <- rep(NA, gibbsIts)
+for (s in 1:gibbsIts) {
+    d_to_avgUkl[s] <- fast_evec_Frob_stat(U_kls_all[, , k, l, s], avgUkl)
+    # d_to_avgUkl[s] <- fast_evec_Frob_stat(U_kls_all[, , k, l, s], U_k0[, , k])
 }
 
-fast_evec_Frob_stat(U_k0[, , 1], avgUks[, , 1])
-fast_evec_Frob_stat(U_k0[, , 2], avgUks[, , 2])
+plot(d_to_avgUkl, type = "l",
+     main = paste0("k = ", k, ", l = ", l))
+
+evec_Frob_stat(U_k0[, , k], avgUkl, returnMats = TRUE)
+evec_Frob_stat(avgUkl, U_k0[, , k], returnMats = TRUE)
 
 # evaluate tau and zeta ---------------------------------------------------
 

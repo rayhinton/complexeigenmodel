@@ -61,3 +61,37 @@ grass_dist <- function (A, B, r = ncol(A), s_tol = 2*.Machine$double.eps) {
     
     return(outlist)
 }
+
+frob_dist <- function(A, B, returnDists = FALSE) {
+    diffAB <- A - B
+    
+    if (returnDists) {
+        sqDists <- Re(diag( t(Conj(diffAB)) %*% diffAB ))
+        Fdist <- Re(sum(sqDists))
+        return(list(Fdist = sqrt(Fdist),
+                    sqDists = sqDists))
+    } else {
+        return(norm(diffAB, "F"))
+    }
+}
+
+fast_evec_Frob_stat <- function(X, Y) {
+    k <- ncol(X)
+    return(
+        sqrt(2*k - 2*sum(Mod( diag(t(Conj(X)) %*% Y)) ))
+    )
+}
+
+evec_Frob_stat <- function(X, Y, returnDists = FALSE, returnMats = FALSE) {
+    Rmat <- diag(complex(modulus = 1, 
+                         argument = -Arg(diag(t(Conj(X)) %*% Y))))  
+    dist_list <- frob_dist(X, Y %*% Rmat, returnDists = returnDists)
+    
+    if (returnMats) {
+        return(list(dist_obj = dist_list,
+                    Xopt = X,
+                    Yopt = Y %*% Rmat))
+    } else {
+        return(dist_list)
+    }
+}

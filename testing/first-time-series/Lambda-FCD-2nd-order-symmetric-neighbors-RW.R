@@ -283,66 +283,10 @@ for (s in 2:gibbsIts) {
                 # FCD sampler.
                 ajk <- Re(ajk)
                 
-                # TODO I had to change this to result_lambdas instead of the
-                # larger array, Lambdak_w_s, because values were missing
-                
                 # 2nd order RW 
                 lp <- result_Lambdas[j, k, w-1]
                 ln <- result_Lambdas[j, k, w+1]
                 mu <- (lp + ln)/2
-                
-                # calculate the mode of the FCD, needed for Runuran sampler.
-                # this is accomplished by solving a cubic equation
-                
-                # for 1st order RW
-                # mu <- result_Lambdas[j, k, w-1]
-                
-                # a <- 1
-                # b <- 2 - mu
-                # c <- LL*taujk2_s[j, k, s-1] + 1 - 2*mu
-                # dd <- LL*taujk2_s[j, k, s-1] - ajk*taujk2_s[j, k, s-1] - mu
-                # 
-                # xroots <- polyroot(c(dd, c, b, a))
-                # 
-                # DISC <- 18*a*b*c*dd - 4*b^3*dd + b^2*c^2 - 4*a*c^3 - 27*a^2*dd^2
-                # 
-                # if (DISC < 0) {
-                #     # TODO this is not ideal, but helps Runuran tabl sampler run
-                #     # xmode <- max(0, Re(xroots[zapsmall(Im(xroots)) == 0]))
-                #     xmode <- max(2e-8, Re(xroots[zapsmall(Im(xroots)) == 0]))
-                # } else if (DISC > 0) {
-                #     numaccroots <- sum(Re(xroots) >= 0)
-                #     if (numaccroots <= 1) {
-                #         xmode <- max(2e-8, Re(xroots))
-                #     } else {
-                #         stop("There are multiple acceptable real roots.")
-                #     }
-                # } else {
-                #     # TODO just report an error for now
-                #     # but, there could be ways to handle if there are "multiple roots;
-                #     # - good: it could that they are 3 repeated real roots
-                #     # - maybe good: 1 and 2 mult. roots; maybe one is <= 0, outside domain?
-                #     stop(paste0("There are multiple real roots. DISC = ", DISC))
-                # }
-                
-                # create the generator object
-                # gen <- 
-                #     Runuran::pinv.new(unnorm_logPDF, lb = 0, ub = Inf,
-                #                       center = xmode, islog = TRUE,
-                #                       uresolution = 1.0e-9, # 1.0e-10 is default
-                #                       smooth = FALSE, # FALSE is default
-                #                       tau2 = tau2_s[s], a = ajk, l1 = l1, l2 = l2, N = LL, 
-                #                       logscale = TRUE)
-
-                # gen <- 
-                # Runuran::tabl.new(unnorm_logPDF, 
-                #                   lb = 0, ub = Inf, mode = xmode, 
-                #                   islog = TRUE,
-                #                   tau2 = taujk2_s[j, k, s-1], 
-                #                   ajk = ajk, mu = mu, N = LL, 
-                #                   logscale = TRUE)
-                # # draw a random sample
-                # result_Lambdas[j, k, w] <- Runuran::ur(gen, 1)
 
                 # by slice sampling, instead
                 newdraw <- uni.slice(result_Lambdas[j, k, w], unnorm_logPDF,
@@ -352,29 +296,14 @@ for (s in 2:gibbsIts) {
                                      logscale = TRUE)    
                 result_Lambdas[j, k, w] <- newdraw
 
-            }
-        }
-        
-        # eventually, update the param_list entry
-        # or maybe, something slightly different 
-        # - I should just return the d x K array of sampled Lambda values
-        #param_list_w1$Lambda_ks <- result_Lambdas
-        #Lambdak_w1_s[, , s] <- param_list_w1$Lambda_ks
-    }    
+            } # end of sampling j in 1:d
+        } # end of sampling k in 1:K
+    } # end of sampling over frequencies
+
+    # save the sampled Lambdas    
     Lambdak_w_s[, , , s] <- result_Lambdas
-    
-    # TODO sample the tau2 parameter
-    
-    # sumall <- sum( (result_Lambdas[, , 2:num_freqs] - 
-    #                     result_Lambdas[, , 1:(num_freqs-1)])^2 )
-    
-    # sumall <- sum( (result_Lambdas[, , 2:(num_freqs-1)] - 
-    #                     .5*result_Lambdas[, , 1:(num_freqs-2)] -
-    #                     .5*result_Lambdas[, , 3:(num_freqs)])^2 )
-    # 
-    # tau2_s[s] <- 1/rgamma(1, tau2_a + .5*(num_freqs-2)*K*d,
-    #                       rate = tau2_b + .5*sumall)
-    
+        
+    # sample the separate taujk2 parameters
     for (j in 1:d) {
         for (k in 1:K) {
             
@@ -396,7 +325,7 @@ for (s in 2:gibbsIts) {
             #                               rate = tau2_b + .5*sumalljk)
         }
     }
-}
+} # end of Gibbs sampling, over s
 
 # }) # end of profvis
 
