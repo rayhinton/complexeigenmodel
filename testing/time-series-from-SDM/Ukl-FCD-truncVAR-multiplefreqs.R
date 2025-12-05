@@ -108,13 +108,17 @@ generate_AR1_covariance <- function(P, sigma2 = 1, rho = 0.5) {
     return(Sigma)
 }
 
+logdet <- function(X) {
+    return( log(EigenR::Eigen_det(X)) )
+}
+
 # setup -------------------------------------------------------------------
 
 # dataseed <- 21092025
 # dataseed <- 22092025
 # dataseed <- 10102025
-dataseed <- 17102025
-# dataseed <- 28112025
+# dataseed <- 17102025
+dataseed <- 28112025
 
 # parseed <- 314
 parseed <- 3141
@@ -127,6 +131,10 @@ Tt <- 1024 # length of time series
 LL <- round(sqrt(Tt))
 # LL <- round(5)
 
+gibbsIts <- 1000
+burnin <- 0.5
+gibbsPrint <- 100
+
 num_freqs <- Tt/2 - 1
 
 # time series generation parameters
@@ -137,6 +145,7 @@ n_knots <- 4
 w <- 10
 m <- 2
 
+### Ukl MH tuning parameters
 # tau_Uk <- rep(.1, K)
 tau_Ukl <- array(0.1, c(K, num_freqs))
 num_tau_check <- 20
@@ -144,11 +153,11 @@ show_tau_tune_summ <- TRUE
 doCayleyZeros <- FALSE
 CayleyZeroProb <- 0.5
 
-omegaw <- seq(1/Tt, by = 1/Tt, length.out = num_freqs)
+### Sigmal MH tuning parameters
+n_Sig <- rep(50, num_freqs)
 
-gibbsIts <- 3000
-burnin <- 0.5
-gibbsPrint <- 100
+# grid of frequencies to calculate over
+omegaw <- seq(1/Tt, by = 1/Tt, length.out = num_freqs)
 
 # hyperparameters to the prior for tau2
 tau2_a <- 1
@@ -357,8 +366,6 @@ lines(Re(fkTR[4, 4, 2, 1:num_freqs]), col = 4, lty = 2)
 
 # initialize arrays -------------------------------------------------------
 
-# U_ks_all <- array(NA, c(P, d, K, gibbsIts))
-# U_ks_all[, , , 1] <- U_k0
 U_kls_all <- array(NA, c(P, d, K, num_freqs, gibbsIts))
 U_kls_all[, , , , 1] <- U_kl0[, , , 1:num_freqs]
 
@@ -368,14 +375,36 @@ Lambdak_w_s[, , , 1] <- Lambdakl0[, , 1:num_freqs]
 taujk2_s <- array(NA, c(d, K, gibbsIts))
 taujk2_s[, , 1] <- 1/rgamma(d*K, tau2_a, rate = tau2_b)
 
+taujk2B_s <- array(NA, c(d, K, gibbsIts))
+taujk2B_s[, , 1] <- 1/rgamma(d*K, tau2_a, rate = tau2_b)
+
 zetajk2_s <- array(NA, c(d, K, gibbsIts))
 zetajk2_s[, , 1] <- 1/rgamma(d*K, tau2_a, rate = tau2_b)
+
+Sigmal_s <- array(NA, c(P, P, num_freqs, gibbsIts))
+Sigmal_s[, , , 1] <- Sigmal0
+result_Sigmals <- Sigmal0
+result_invSigmals <- array(NA, c(P, P, num_freqs))
+for (l in 1:num_freqs) {
+    result_invSigmals[, , l] <- solve(result_Sigmals[, , l])
+}
 
 accCount_s <- array(NA, c(K, num_freqs, gibbsIts))
 accCount_s[, , 1] <- TRUE
 
-# sampling ----------------------------------------------------------------
+accCount_Sigma_s <- array(NA, c(num_freqs, gibbsIts))
+accCount_Sigma_s[, 1] <- TRUE
 
+# parallel ----------------------------------------------------------------
+
+library(foreach)
+library(doParallel)
+
+n_cores <- 12
+cluster <- makeCluster(n_cores)
+registerDoParallel(cluster)
+
+# sampling ----------------------------------------------------------------
 {
     starttime <- Sys.time()
     for (s in 2:gibbsIts) {
@@ -434,9 +463,16 @@ accCount_s[, , 1] <- TRUE
                     ajk <- Re(ajk)
                     
                     # 2nd order RW, previous and next neighbors
-                    # lp <- result_Lambdas[j, k, w-1]
-                    # ln <- result_Lambdas[j, k, w+1]
-                    # mu <- (lp + ln)/2
+                    lp <- result_Lambdas[j, k, w-1]
+                    ln <- result_Lambdas[j, k, w+1]
+                    mu <- (lp + ln)/2
+                    
+                    # SPECIAL for different smoothing parameters
+                    if (l < 300) {
+                        varpar_jkl <- taujk2_s[j, k, s-1]
+                    } else {
+                        varpar_jkl <- taujk2B_s[j, k, s-1]
+                    }
                     
                     # 2nd order RW, previous two
                     # lm1 <- result_Lambdas[j, k, w-1]
@@ -444,12 +480,13 @@ accCount_s[, , 1] <- TRUE
                     # mu <- 2*lm1 - lm2
                     
                     # 1st order RW
-                    mu <- result_Lambdas[j, k, w-1]
+                    # mu <- result_Lambdas[j, k, w-1]
                     
                     # by slice sampling, instead
                     newdraw <- uni.slice(result_Lambdas[j, k, w], unnorm_logPDF,
-                                         w = 1, m = Inf, lower = 0, upper = Inf, 
-                                         tau2 = taujk2_s[j, k, s-1], 
+                                         w = 100, m = Inf, lower = 0, upper = Inf, 
+                                         #tau2 = taujk2_s[j, k, s-1], 
+                                         tau2 = varpar_jkl,
                                          ajk = ajk, mu = mu, N = LL, 
                                          logscale = TRUE)    
                     result_Lambdas[j, k, w] <- newdraw
@@ -494,6 +531,7 @@ accCount_s[, , 1] <- TRUE
             for (k in 1:K) {
                 
                 # 2nd order RW, next and previous neighbors
+                ### BEGIN STANDARD SAMPLING
                 # sumalljk <- sum(
                 #     (result_Lambdas[j, k, 2:(num_freqs-1)] -
                 #          .5*result_Lambdas[j, k, 1:(num_freqs-2)] -
@@ -501,6 +539,28 @@ accCount_s[, , 1] <- TRUE
                 # 
                 # taujk2_s[j, k, s] <- 1/rgamma(1, tau2_a + .5*(num_freqs-2),
                 #                               rate = tau2_b + .5*sumalljk)
+                ### END STANDARD SAMPLING
+                
+                # 2nd order RW, next and previous; DIFFERENT FREQUENCIES
+                sumalljk <- sum(
+                    (result_Lambdas[j, k, 2:(299)] -
+                         .5*result_Lambdas[j, k, 1:(299-1)] -
+                         .5*result_Lambdas[j, k, 3:(300)])^2)
+                
+                sumalljkB <- sum(
+                    (result_Lambdas[j, k, 300:(num_freqs-1)] -
+                         .5*result_Lambdas[j, k, 299:(num_freqs-2)] -
+                         .5*result_Lambdas[j, k, 301:(num_freqs)])^2)
+                
+                # this is for portion A
+                # taujk2_s[j, k, s] <- 1/rgamma(1, tau2_a + .5*(298),
+                #                               rate = tau2_b + .5*sumalljk)
+                taujk2_s[j, k, s] <- 10000
+                
+                # this is for portion B
+                taujk2B_s[j, k, s] <- 1/rgamma(1, tau2_a + .5*(num_freqs - 300),
+                                              rate = tau2_b + .5*sumalljkB)
+                ### END different frequencies
                 
                 # 2nd order RW, previous two
                 # sumalljk <- sum(
@@ -512,11 +572,11 @@ accCount_s[, , 1] <- TRUE
                 #                               rate = tau2_b + .5*sumalljk)
                 
                 # 1st order RW
-                sumalljk <- sum(
-                    (result_Lambdas[j, k, 2:(num_freqs-1)] -
-                        result_Lambdas[j, k, 1:(num_freqs-2)])^2)
-                taujk2_s[j, k, s] <- 1/rgamma(1, tau2_a + .5*(num_freqs-2),
-                                            rate = tau2_b + .5*sumalljk)
+                # sumalljk <- sum(
+                #     (result_Lambdas[j, k, 2:(num_freqs-1)] -
+                #         result_Lambdas[j, k, 1:(num_freqs-2)])^2)
+                # taujk2_s[j, k, s] <- 1/rgamma(1, tau2_a + .5*(num_freqs-2),
+                #                             rate = tau2_b + .5*sumalljk)
                 
                 # zetajk2 sampling
                 # based on 1st order random walk for the last Lambda
@@ -545,7 +605,8 @@ accCount_s[, , 1] <- TRUE
             for (l in 1:num_freqs) {
                 sigma_k2 <- sigmakl02[k, l]
                 # Sigmas <- Sigmal0[, , l]
-                invSigmas <- invSigmal0[, , l]
+                # invSigmas <- invSigmal0[, , l]
+                invSigmas <- result_invSigmals[, , l]
                 
                 Us <- U_kls[, , k, l]
                 
@@ -608,6 +669,78 @@ accCount_s[, , 1] <- TRUE
         # Sigmal sampling
         #####
         
+        accCount_Sigma <- rep(TRUE, num_freqs)
+        
+        for (l in 1:num_freqs) {
+        # this_Sigma_result <- foreach(l = 1:num_freqs) %dopar% {
+            Sigmap <- rFTCW(result_Sigmals[, , l], n_Sig[l], P, TRUE, TRUE)
+            invSigmap <- solve(Sigmap)
+            
+            Sigmals <- result_Sigmals[, , l]
+            invSigmals <- result_invSigmals[, , l]
+            
+            # sumlog_p
+            sumlog_p <- 0
+            sumlog_s <- 0
+            for (k in 1:K) {
+                sumlog_p <- sumlog_p + 
+                    logdet(t(Conj(newU_kls[, , k, l])) %*% invSigmap %*% 
+                                newU_kls[, , k, l])
+                sumlog_s <- sumlog_s + 
+                    logdet(t(Conj(newU_kls[, , k, l])) %*% invSigmals %*% 
+                               newU_kls[, , k, l])
+            }
+            
+            logdens_num <- -d*K* logdet(Sigmap) - P * sumlog_p - 
+                n_Sig[l] * logdet(Sigmap) +
+                (n_Sig[l] - P) * logdet(Sigmals) - 
+                # P*n_Sig[l] * log( Re(sum(diag( invSigmap %*% Sigmals))) ) 
+                P*n_Sig[l] * log( Re(sum(t(invSigmap) * Sigmals)) ) 
+            
+            logdens_den <- -d*K* logdet(Sigmals) - P * sumlog_s - 
+                n_Sig[l] * logdet(Sigmals) +
+                (n_Sig[l] - P) * logdet(Sigmap) - 
+                # P*n_Sig[l] * log( Re(sum(diag( invSigmals %*% Sigmap ))) ) 
+                P*n_Sig[l] * log( Re(sum(t(invSigmals) * Sigmap )) ) 
+            
+            logr <- Re(logdens_num - logdens_den)
+            
+            if (log(runif(1)) <= logr) {
+                result_Sigmals[, , l] <- Sigmap
+                result_invSigmals[, , l] <- invSigmap
+
+                # Sigmals <- Sigmap
+                # invSigmals <- invSigmap
+                # acc_this_Sigma <- TRUE
+            } else {
+                # TODO this is technically redundant, I think
+                result_Sigmals[, , l] <- Sigmals
+                result_invSigmals[, , l] <- invSigmals
+                accCount_Sigma[l] <- FALSE
+
+                # acc_this_Sigma <- FALSE
+            }
+            
+            # list(Sigmals, invSigmals, acc_this_Sigma)
+            # list(Sigmal = Sigmals, invSigmal = invSigmals, acc = acc_this_Sigma)
+        } # end of frequencies for Sigmal sampling
+        
+        # for (l in 1:num_freqs) {
+        #     result_Sigmals[, , l] <- this_Sigma_result[[l]][[1]]
+        #     result_invSigmals[, , l] <- this_Sigma_result[[l]][[2]]
+        #     accCount_Sigma[l] <- this_Sigma_result[[l]][[3]]
+        # }
+        
+        # Vectorized extraction (faster than for loop)
+        # result_Sigmals <- simplify2array(lapply(this_Sigma_result, `[[`, "Sigmal"))
+        # result_invSigmals <- simplify2array(lapply(this_Sigma_result, `[[`, "invSigmal"))
+        # accCount_Sigma <- vapply(this_Sigma_result, `[[`, logical(1), "acc")
+        
+        Sigmal_s[, , , s] <- result_Sigmals
+        accCount_Sigma_s[, s] <- accCount_Sigma
+        
+        ### end of Sigmal sampling
+        
         ### do adaptation of the Ukl MH tuning parameter
         if (s %in% tau_s_check) {
             cat(paste0("\n", s, ": Check for tau_Ukl adaptation\n"))
@@ -652,13 +785,24 @@ accCount_s[, , 1] <- TRUE
             #         summary() |>
             #         print()
             # }
-        }
+            
+            ### Sigmal adaptation
+            curr_Sigmal_acc_rate <- 
+                rowMeans(accCount_Sigma_s[, (s - tau_numin + 1):s])
+            
+            n_Sig[curr_Sigmal_acc_rate >= .45] <- 
+                pmax(round(n_Sig[curr_Sigmal_acc_rate >= .45] / 4), P+1)
+            n_Sig[curr_Sigmal_acc_rate <= .15] <- 
+                n_Sig[curr_Sigmal_acc_rate <= .15] * 2
+            
+        } 
         
     } # end of s, Gibbs sampling
     endtime <- Sys.time()
 }
 
 # evaluate ----------------------------------------------------------------
+stopCluster(cl = cluster)
 
 print(endtime - starttime)
 
@@ -670,6 +814,12 @@ apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean) |> t() |> summary()
 
 apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean) |>
     as.vector() |> 
+    quantile(probs = c(0, 0.025, .25, .5, .75, .975, 1))
+
+# check Sigmal acceptance rates
+rowMeans(accCount_Sigma_s) |> 
+    quantile(probs = c(0, 0.025, .25, .5, .75, .975, 1))
+rowMeans(accCount_Sigma_s[, gibbsPostBurn]) |> 
     quantile(probs = c(0, 0.025, .25, .5, .75, .975, 1))
 
 # evaluate Lambdas --------------------------------------------------------
@@ -740,7 +890,7 @@ which.min(ds_to_true)
 # distance and trace plot for one Ukl -------------------------------------
 
 k <- 1
-l <- 500
+l <- 488
 
 apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean)[k, l]
 
@@ -751,8 +901,8 @@ print(fast_evec_Frob_stat(U_kl0[, , k, l], avgUkl))
 
 d_to_avgUkl <- rep(NA, gibbsIts)
 for (s in 1:gibbsIts) {
-    # d_to_avgUkl[s] <- fast_evec_Frob_stat(U_kls_all[, , k, l, s], avgUkl)
-    d_to_avgUkl[s] <- fast_evec_Frob_stat(U_kls_all[, , k, l, s], U_kl0[, , k, l])
+    d_to_avgUkl[s] <- fast_evec_Frob_stat(U_kls_all[, , k, l, s], avgUkl)
+    # d_to_avgUkl[s] <- fast_evec_Frob_stat(U_kls_all[, , k, l, s], U_kl0[, , k, l])
 }
 
 plot(d_to_avgUkl, type = "l",
@@ -760,3 +910,44 @@ plot(d_to_avgUkl, type = "l",
 
 evec_Frob_stat(U_kl0[, , k, l], avgUkl, returnMats = TRUE)
 evec_Frob_stat(avgUkl, U_kl0[, , k, l], returnMats = TRUE)
+
+# evaluate Sigmal ---------------------------------------------------------
+
+quantile(n_Sig, c(0, .025, .25, .5, .75, .975, 1))
+
+l <- 511
+
+# check Sigmal acceptance rates
+mean(accCount_Sigma_s[l, ])
+mean(accCount_Sigma_s[l, gibbsPostBurn])
+
+avgSigmal <- apply(Sigmal_s[, , l, gibbsPostBurn], c(1, 2), mean)
+
+d_to_avgSigmal <- rep(NA, gibbsIts)
+for (s in 1:gibbsIts) {
+    d_to_avgSigmal[s] <- frob_dist(Sigmal_s[, , l, s], avgSigmal)
+}
+
+plot(d_to_avgSigmal, type = "l",
+     main = paste0("l = ", l))
+
+
+par(mfrow = c(2, 2), mar = c(2, 2, 2, 1))
+for(j in 1:4) {
+    plot(Re(Sigmal_s[j, j, l, ]), type = "l", 
+         main = paste0("l = ", l, ", j = ", j),
+         xlab = "", ylab = "")
+}
+
+
+par(mfrow = c(1, 1), mar = c(5.1, 4.1, 4.1, 2.1))
+
+
+# smoothing parameter summaries -------------------------------------------
+
+taujk2_s[1, 1, ]
+dim(taujk2_s)
+mean(taujk2_s[1, 1, gibbsPostBurn])
+
+apply(taujk2_s[, , gibbsPostBurn], c(1, 2), mean)
+apply(taujk2B_s[, , gibbsPostBurn], c(1, 2), mean)

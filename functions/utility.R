@@ -54,6 +54,8 @@ rscnorm <- function(n) {
 
 # rFTCW -------------------------------------------------------------------
 
+# recommended to always use byCholesky = TRUE, at the very least. otherwise,
+# the function takes longer as n grows.
 rFTCW <- function(Sigma, n, a, useEigenR = FALSE, byCholesky = FALSE) {
     W <- rcomplex_wishart(n, Sigma, useEigenR, byCholesky)
     Y <- a * W / Re(sum(diag(W)))
