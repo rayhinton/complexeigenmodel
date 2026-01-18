@@ -180,7 +180,7 @@ tau_s_check <- seq(tau_numin, burninS, tau_numin)
 # generate true parameters ------------------------------------------------
 
 # set.seed(parseed)
-set.seed(95)
+set.seed(50)
 {
 VARpars <- array(NA, c(P, P, K))
 # for (k in 1:K) {
@@ -241,10 +241,11 @@ diffs2nd[1, 1, 2]
 
 apply(diffs2nd[, , 2:(Tt-1)]^2, c(1, 2), sum)
 
-# plot(diffs2nd[1, 1, 2:(num_freqs-1)]^2, type = "l")
-# plot(diffs2nd[2, 1, 2:(num_freqs-1)]^2, type = "l")
+plot(diffs2nd[1, 1, 2:(num_freqs-1)]^2, type = "l")
+plot(diffs2nd[2, 1, 2:(num_freqs-1)]^2, type = "l")
 
 apply(diffs2nd[, , 2:(num_freqs-1)]^2, c(1, 2), max) / 
     apply(diffs2nd[, , 2:(num_freqs-1)]^2, c(1, 2), median)
 
 }
+

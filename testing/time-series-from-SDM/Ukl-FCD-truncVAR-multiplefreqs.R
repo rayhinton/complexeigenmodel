@@ -117,12 +117,12 @@ logdet <- function(X) {
 # dataseed <- 21092025
 # dataseed <- 22092025
 # dataseed <- 10102025
-dataseed <- 17102025
-# dataseed <- 28112025
+# dataseed <- 17102025
+dataseed <- 28112025
 
 # parseed <- 314
 # parseed <- 3141
-parseed <- 13
+parseed <- 50
 # parseed <- 963456789
 
 P <- 4
@@ -189,12 +189,8 @@ VARpars <- array(NA, c(P, P, K))
 VARpars[, , 1:K] <- generate_VAR1_coef(P, 0.8)
 noiseSigma <- generate_AR1_covariance(P, sigma2 = 1, rho = 0.5)
 
-# sigmakl02, scale parameter
-# sigmakl02 <- matrix(rgamma(K*(num_freqs + 2), 1, 1), 
-#                     K, num_freqs + 2)
-# this makes it constant across all frequencies for each k
-sigmakl02 <- matrix(rgamma(K, 1, 1),
-                    K, Tt)
+# sigmak02, scale parameter
+sigmak02 <- rgamma(K, 1, 1)
 
 fkTR <- array(NA, c(P, P, K, Tt))
 U_kl0 <- array(NA, c(P, d, K, Tt))
@@ -210,7 +206,7 @@ for (k in 1:K) {
         thisU <- f_evd$vectors[, 1:d]
         thisLambda <- f_evd$values[1:d]
         
-        fkTR[, , k, t] <- sigmakl02[k, t] * ( thisU %*% diag(thisLambda) %*% 
+        fkTR[, , k, t] <- sigmak02[k] * ( thisU %*% diag(thisLambda) %*% 
                                           t(Conj(thisU)) + diag(P) )
         U_kl0[, , k, t] <- thisU
         Lambdakl0[, k, t] <- thisLambda
@@ -390,9 +386,8 @@ taujk2_s[, , 1] <- 1/rgamma(d*K, tau2_a, rate = tau2_b)
 zetajk2_s <- array(NA, c(d, K, gibbsIts))
 zetajk2_s[, , 1] <- 1/rgamma(d*K, tau2_a, rate = tau2_b)
 
-sigmakl2_s <- array(NA, c(K, num_freqs, gibbsIts))
-# sigmakl2_s[, , 1] <- rgamma(K*num_freqs, 1, 1)
-sigmakl2_s[, , 1] <- sigmakl02[, 1:num_freqs]
+sigmak2_s <- array(NA, c(K, gibbsIts))
+sigmak2_s[, 1] <- sigmak02
 
 Sigmal_s <- array(NA, c(P, P, num_freqs, gibbsIts))
 Sigmal_s[, , , 1] <- Sigmal0
@@ -441,8 +436,8 @@ registerDoParallel(cluster)
                 # (take the Real part, since the quadratic form should be real, 
                 # but may have a small complex part due to numerical issues.)
                 tjk <- Re( t(Conj(Ukl[, j])) %*% LSkw %*% Ukl[, j] ) / 
-                    # sigmakl02[k, 1]
-                    sigmakl2_s[k, 1, s-1]
+                    #sigmakl2_s[k, 1, s-1]
+                    sigmak2_s[k, s-1]
                 
                 ##### sample from a truncated Gamma distribution
                 # lower and upper bounds for truncating the Gamma distribution
@@ -474,8 +469,8 @@ registerDoParallel(cluster)
                     
                     for (j in sample(d)) {
                         ajk <- t(Conj(Ukw[, j])) %*% Dkw1 %*% Ukw[, j] / 
-                            # sigmakl02[k, w]
-                            sigmakl2_s[k, w, s-1]
+                            # sigmakl2_s[k, w, s-1]
+                            sigmak2_s[k, s-1]
                         # should be strictly real
                         ajk <- Re(ajk)
                         
@@ -529,8 +524,8 @@ registerDoParallel(cluster)
             
             for (j in sample(d)) {
                 ajk <- t(Conj(Uw1[, j])) %*% Dkw1 %*% Uw1[, j] / 
-                    # sigmakl02[k, num_freqs]
-                    sigmakl2_s[k, num_freqs, s-1]
+                    # sigmakl2_s[k, num_freqs, s-1]
+                    sigmak2_s[k, s-1]
                 # should be strictly real - this is done in the existing Lambda
                 # FCD sampler.
                 ajk <- Re(ajk)
@@ -634,8 +629,8 @@ registerDoParallel(cluster)
             
             # calculate traces and other terms, for the MH acceptance ratio
             for (l in 1:num_freqs) {
-                # sigma_k2 <- sigmakl02[k, l]
-                sigma_k2 <- sigmakl2_s[k, l, s-1]
+                # sigma_k2 <- sigmakl2_s[k, l, s-1]
+                sigma_k2 <- sigmak2_s[k, s-1]
                 # Sigmas <- Sigmal0[, , l]
                 # invSigmas <- invSigmal0[, , l]
                 invSigmas <- result_invSigmals[, , l]
@@ -776,6 +771,9 @@ registerDoParallel(cluster)
         ### sigmakl2 sampling
         
         for (k in 1:K) {
+            par1 <- num_freqs*P*LL
+            par2 <- 0
+            
             for (l in 1:num_freqs) {
                 # TODO rest of the calculations
                 # zetajk2_s[j, k, s] <- 1/rgamma(1, tau2_a + .5,
@@ -787,8 +785,6 @@ registerDoParallel(cluster)
                 Ukl <- newU_kls[, , k, l]
                 Lambdakl <- diag(result_Lambdas[, k, l])
                 
-                par1 <- P*LL
-                
                 mat1 <- diag(P) - Ukl %*% 
                     diag(1/(1/result_Lambdas[, k, l] + 1)) %*% t(Conj(Ukl))
                 # par2 <- 
@@ -796,11 +792,13 @@ registerDoParallel(cluster)
                     # t(Conj(newU_kls[, , k, l])) + diag(P))) * data
                 # par2 <- Re(sum(
                     # solve(Ukl %*% Lambdakl %*% t(Conj(Ukl)) + diag(P)) * LSkw))
-                par2 <- Re(sum(t(mat1) * LSkw))
                 
-                sigmakl2_s[k, l, s] <- 1/rgamma(1, par1, rate = par2)
+                par2 <- par2 + Re(sum(t(mat1) * LSkw))
                 
+                # sigmakl2_s[k, l, s] <- 1/rgamma(1, par1, rate = par2)
             }
+            
+            sigmak2_s[k, s] <- 1/rgamma(1, par1, rate = par2)
         }
         
         ### end of sigmakl2 sampling
