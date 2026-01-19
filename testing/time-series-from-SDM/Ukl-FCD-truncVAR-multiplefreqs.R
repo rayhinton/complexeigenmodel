@@ -116,13 +116,13 @@ logdet <- function(X) {
 
 # dataseed <- 21092025
 # dataseed <- 22092025
-# dataseed <- 10102025
+dataseed <- 10102025
 # dataseed <- 17102025
-dataseed <- 28112025
+# dataseed <- 28112025
 
 # parseed <- 314
 # parseed <- 3141
-parseed <- 50
+parseed <- 112
 # parseed <- 963456789
 
 P <- 4
@@ -130,7 +130,7 @@ d <- 2
 K <- 2
 Tt <- 1024 # length of time series
 LL <- round(sqrt(Tt))
-# LL <- round(5)
+# LL <- round(P+1)
 
 # options include: 1RW, 2RWPN
 Lambda_prior <- "2RWPN"
@@ -347,7 +347,7 @@ for (w in 1:num_freqs){
 
 # compare SDM ests and true SDMs ------------------------------------------
 
-plot(Re(SDMests[[1]][1,1, ]), type = "l", ylim = c(0, 50), 
+plot(Re(SDMests[[1]][1,1, ]), type = "l", ylim = c(0, max(Re(SDMests[[1]]))), 
      ylab = "spectral density", main = paste0("k = ", 1))
 lines(Re(SDMests[[1]][2,2, ]), col = 2)
 lines(Re(SDMests[[1]][3,3, ]), col = 3)
@@ -358,7 +358,7 @@ lines(Re(fkTR[2, 2, 1, 1:num_freqs]), col = 2, lty = 2)
 lines(Re(fkTR[3, 3, 1, 1:num_freqs]), col = 3, lty = 2)
 lines(Re(fkTR[4, 4, 1, 1:num_freqs]), col = 4, lty = 2)
 
-plot(Re(SDMests[[2]][1,1, ]), type = "l", ylim = c(0, 20),
+plot(Re(SDMests[[2]][1,1, ]), type = "l", ylim = c(0, max(Re(SDMests[[2]]))),
      ylab = "spectral density", main = paste0("k = ", 2))
 lines(Re(SDMests[[2]][2,2, ]), col = 2)
 lines(Re(SDMests[[2]][3,3, ]), col = 3)
