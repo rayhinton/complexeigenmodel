@@ -180,7 +180,7 @@ tau_s_check <- seq(tau_numin, burninS, tau_numin)
 # generate true parameters ------------------------------------------------
 
 # set.seed(parseed)
-set.seed(50)
+set.seed(13)
 {
 VARpars <- array(NA, c(P, P, K))
 # for (k in 1:K) {

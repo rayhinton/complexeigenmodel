@@ -122,7 +122,7 @@ dataseed <- 28112025
 
 # parseed <- 314
 # parseed <- 3141
-parseed <- 50
+parseed <- 3141
 # parseed <- 963456789
 
 P <- 4
@@ -565,8 +565,10 @@ registerDoParallel(cluster)
     
                     #taujk2_s[j, k, s] <- 1/rgamma(1, tau2_a + .5,
                     #                              rate = tau2_b + .5*sumalljk)
-                    taujkl2_s[j, k, , s] <- 1/rgamma(1, tau2_a + .5,
-                                                  rate = tau2_b + .5*sumalljk)
+                    taujkl2_s[j, k, , s] <- 
+                        1/rgamma(length(sumalljk), 
+                                 tau2_a + .5,
+                                 rate = tau2_b + .5*sumalljk)
                     ### END STANDARD SAMPLING
                 }
                 
@@ -957,8 +959,8 @@ which.min(ds_to_true)
 
 # distance and trace plot for one Ukl -------------------------------------
 
-k <- 1
-l <- 51
+k <- 2
+l <- 396
 
 apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean)[k, l]
 
@@ -983,7 +985,7 @@ evec_Frob_stat(avgUkl, U_kl0[, , k, l], returnMats = TRUE)
 
 quantile(n_Sig, c(0, .025, .25, .5, .75, .975, 1))
 
-l <- 51
+l <- 396
 
 # check Sigmal acceptance rates
 mean(accCount_Sigma_s[l, ])
@@ -1010,55 +1012,33 @@ par(mfrow = c(1, 1), mar = c(5.1, 4.1, 4.1, 2.1))
 
 # smoothing parameter summaries -------------------------------------------
 
-dim(taujk2_s)
-mean(taujk2_s[1, 1, gibbsPostBurn])
+dim(taujkl2_s)
+dim(taujkl2_s[1, 1, 1, gibbsPostBurn])
+length(taujkl2_s[1, 1, 1, gibbsPostBurn])
+length(taujkl2_s[1, 1, round(num_freqs/2), gibbsPostBurn])
 
-apply(taujk2_s[, , gibbsPostBurn], c(1, 2), mean)
-apply(taujk2B_s[, , gibbsPostBurn], c(1, 2), mean)
+plot(taujkl2_s[1, 1, 1, gibbsPostBurn], type = "l")
+
+median(taujkl2_s[1, 1, 1, gibbsPostBurn])
+
+median(taujkl2_s[1, 1, 150, gibbsPostBurn])
+median(taujkl2_s[2, 1, 150, gibbsPostBurn])
+
+median(taujkl2_s[1, 1, 256, gibbsPostBurn])
+median(taujkl2_s[1, 1, 350, gibbsPostBurn])
 
 # evaluate sigmakl2 -------------------------------------------------------
 
-sigmakl02[1, 1]
-sigmakl02[1, 2]
+sigmak02[1]
+sigmak02[2]
 
-sigmakl02[2, 1]
-sigmakl02[2, 2]
+k <- 2
+sigmak02[k]
+quantile(sigmak2_s[k, gibbsPostBurn], c(.025, .5, .975))
 
-k <- 1
-l <- 75
-sigmakl02[k, l]
-mean(sigmakl2_s[k, l, gibbsPostBurn])
-quantile(sigmakl2_s[k, l, gibbsPostBurn], c(.025, .5, .975))
-
-plot(sigmakl2_s[k, l, ], type = "l",
-     main = paste0("k = ", k, ", l = ", l))
-
-lower_sigmakl2 <- apply(sigmakl2_s[, , gibbsPostBurn], c(1, 2), quantile, 0.025)
-upper_sigmakl2 <- apply(sigmakl2_s[, , gibbsPostBurn], c(1, 2), quantile, 0.975)
-coverage_sigmakl2 <- (sigmakl02[, 1:num_freqs] >= lower_sigmakl2) & 
-    (sigmakl02[, 1:num_freqs] <= upper_sigmakl2)
-
-mean(coverage_sigmakl2)
-
-
-dim(coverage_sigmakl2)
-
-which_sigmakl2_bad <- which(!coverage_sigmakl2, arr.ind = TRUE)
-
-which_sigmakl2_bad[which_sigmakl2_bad[, 1] == 1, ]
-which_sigmakl2_bad[which_sigmakl2_bad[, 1] == 2, ]
-
-### sigmakl2 plot
-
-plot(upper_sigmakl2[1, ], ylim = c(0, 3), type = "l", lty = 2)
-lines(lower_sigmakl2[1, ], lty = 2)
-lines(rowMeans(sigmakl2_s[1, , gibbsPostBurn]))
-lines(sigmakl02[1, 1:num_freqs], lty = 3)
-
-lines(upper_sigmakl2[2, ], ylim = c(0, 2), type = "l", lty = 2, col = 2)
-lines(lower_sigmakl2[2, ], lty = 2, col = 2)
-lines(rowMeans(sigmakl2_s[2, , gibbsPostBurn]), col = 2)
-lines(sigmakl02[2, 1:num_freqs], lty = 3, col = 2)
+plot(sigmak2_s[k, ], type = "l",
+     main = paste0("k = ", k))
+abline(h = sigmak02[k])
 
 # evaluate full SDM estimates ---------------------------------------------
 
@@ -1070,7 +1050,7 @@ for (k in 1:K) {
     for (l in 1:num_freqs) {
         thisSDM <- matrix(0 + 0i, P, P)
         for (s in gibbsPostBurn) {
-            thisSDM <- thisSDM + sigmakl2_s[k, l, s] * 
+            thisSDM <- thisSDM + sigmak2_s[k, s] * 
                 (U_kls_all[, , k, l, s] %*% diag(Lambdak_w_s[, k, l, s])
                  %*% t(Conj(U_kls_all[, , k, l, s])) + diag(P))
         }
@@ -1087,19 +1067,20 @@ for (k in 1:K) {
 summary(as.vector(posterior_dists))
 summary(as.vector(multitaper_dists))
 
-quantile(as.vector(posterior_dists), 
+k <- 2
+quantile(as.vector(posterior_dists[k, ]), 
          probs = c(0, .025, .5, .975, 1))
-quantile(as.vector(multitaper_dists), 
+quantile(as.vector(multitaper_dists[k, ]), 
          probs = c(0, .025, .5, .975, 1))
 
 # qqplot(as.vector(posterior_dists), 
 #        as.vector(multitaper_dists))
 # abline(0, 1, lty = 2)
 
-plot(density(as.vector(posterior_dists), from = 0), col = 1,
+plot(density(as.vector(posterior_dists[k, ]), from = 0), col = 1,
      main = "densities of estimate distances",
      xlab = "Frob. distance")
-lines(density(as.vector(multitaper_dists), from = 0), col = 2)
+lines(density(as.vector(multitaper_dists[k, ]), from = 0), col = 2)
 legend(x = "topright", legend = c("posterior", "multitaper"),
        col = c(1, 2), lwd = 2)
 
@@ -1107,7 +1088,7 @@ k <- 1
 l <- 75
 thisSDM <- matrix(0 + 0i, P, P)
 for (s in gibbsPostBurn) {
-    thisSDM <- thisSDM + sigmakl2_s[k, l, s] * 
+    thisSDM <- thisSDM + sigmak2_s[k, s] * 
         (U_kls_all[, , k, l, s] %*% diag(Lambdak_w_s[, k, l, s])
          %*% t(Conj(U_kls_all[, , k, l, s])) + diag(P))
 }
