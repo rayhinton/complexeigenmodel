@@ -114,9 +114,26 @@ logdet <- function(X) {
     return( log(EigenR::Eigen_det(X)) )
 }
 
+save_plot_png <- function(plot_path) {
+    dev.copy(png, plot_path, 
+             width = 1600, height = 900, res = 150)
+    dev.off()
+}
+
 # setup -------------------------------------------------------------------
 
 # the parameters file is run above
+
+options(device = function() png(width = 800, height = 600))
+
+# Create timestamped results directory
+timestamp <- format(Sys.time(), "%Y%m%d-%H%M%S")
+result_dir <- file.path("results", paste0("full-SDM-diffSmoothness_", timestamp))
+dir.create(result_dir, recursive = TRUE)
+
+# save the parameters file in the results directory, for later reference
+file.copy("testing/time-series-from-SDM/model-simulation-parameters.R", 
+    file.path(result_dir, "model-simulation-parameters.R"))
 
 # generate true parameters ------------------------------------------------
 
@@ -175,13 +192,17 @@ for (l in 1:num_freqs) {
 
 k <- 1
 plot(Lambdakl0[1, k, 1:num_freqs], type = "l", ylab = "lambda",
-     main = paste0("k = ", k), ylim = c(0, max(Lambdakl0[, k, ])))
+     main = paste0("True Lambda, k = ", k), 
+     ylim = c(0, max(Lambdakl0[, k, ])))
 lines(Lambdakl0[2, k, 1:num_freqs], col = 2)
+save_plot_png(file.path(result_dir, "trueLambda_1.png"))
 
 k <- 2
 plot(Lambdakl0[1, k, 1:num_freqs], type = "l", ylab = "lambda",
-     main = paste0("k = ", k), ylim = c(0, max(Lambdakl0[, k, ])))
+     main = paste0("True Lambda, k = ", k), 
+     ylim = c(0, max(Lambdakl0[, k, ])))
 lines(Lambdakl0[2, k, 1:num_freqs], col = 2)
+save_plot_png(file.path(result_dir, "trueLambda_2.png"))
 
 # calculate Cholesky decompositions ---------------------------------------
 
@@ -226,15 +247,17 @@ max(abs(Im(Yts)))
 # set Y to the real components, only
 Yts <- Re(Yts)
 
-plot(Yts[1, 1, ], type = "l")
+plot(Yts[1, 1, ], type = "l", main = "Observed time series 1")
 lines(Yts[2, 1, ], col = 2)
 lines(Yts[3, 1, ], col = 3)
 lines(Yts[4, 1, ], col = 4)
+save_plot_png(file.path(result_dir, "observed-TS-1.png"))
 
-plot(Yts[1, 2, ], type = "l")
+plot(Yts[1, 2, ], type = "l", main = "Observed time series 2")
 lines(Yts[2, 2, ], col = 2)
 lines(Yts[3, 2, ], col = 3)
 lines(Yts[4, 2, ], col = 4)
+save_plot_png(file.path(result_dir, "observed-TS-2.png"))
 
 # estimate SDMs -----------------------------------------------------------
 
@@ -288,7 +311,8 @@ for (w in 1:num_freqs){
 # compare SDM ests and true SDMs ------------------------------------------
 
 plot(Re(SDMests[[1]][1,1, ]), type = "l", ylim = c(0, max(Re(SDMests[[1]]))), 
-     ylab = "spectral density", main = paste0("k = ", 1))
+     ylab = "spectral density", 
+     main = paste0("Diag. entries of multitaper est., k = ", 1))
 lines(Re(SDMests[[1]][2,2, ]), col = 2)
 lines(Re(SDMests[[1]][3,3, ]), col = 3)
 lines(Re(SDMests[[1]][4,4, ]), col = 4)
@@ -298,8 +322,11 @@ lines(Re(fkTR[2, 2, 1, 1:num_freqs]), col = 2, lty = 2)
 lines(Re(fkTR[3, 3, 1, 1:num_freqs]), col = 3, lty = 2)
 lines(Re(fkTR[4, 4, 1, 1:num_freqs]), col = 4, lty = 2)
 
+save_plot_png(file.path(result_dir, "SDM-est-and-true-1.png"))
+
 plot(Re(SDMests[[2]][1,1, ]), type = "l", ylim = c(0, max(Re(SDMests[[2]]))),
-     ylab = "spectral density", main = paste0("k = ", 2))
+     ylab = "spectral density", 
+     main = paste0("Diag. entries of multitaper est., k = ", 2))
 lines(Re(SDMests[[2]][2,2, ]), col = 2)
 lines(Re(SDMests[[2]][3,3, ]), col = 3)
 lines(Re(SDMests[[2]][4,4, ]), col = 4)
@@ -308,6 +335,8 @@ lines(Re(fkTR[1, 1, 2, 1:num_freqs]), col = 1, lty = 2)
 lines(Re(fkTR[2, 2, 2, 1:num_freqs]), col = 2, lty = 2)
 lines(Re(fkTR[3, 3, 2, 1:num_freqs]), col = 3, lty = 2)
 lines(Re(fkTR[4, 4, 2, 1:num_freqs]), col = 4, lty = 2)
+
+save_plot_png(file.path(result_dir, "SDM-est-and-true-2.png"))
 
 # initialize arrays -------------------------------------------------------
 
