@@ -124,8 +124,6 @@ save_plot_png <- function(plot_path) {
 
 # the parameters file is run above
 
-options(device = function() png(width = 800, height = 600))
-
 # Create timestamped results directory
 timestamp <- format(Sys.time(), "%Y%m%d-%H%M%S")
 result_dir <- file.path("results", paste0("full-SDM-diffSmoothness_", timestamp))
@@ -376,12 +374,12 @@ accCount_Sigma_s[, 1] <- TRUE
 
 # parallel ----------------------------------------------------------------
 
-library(foreach)
-library(doParallel)
-
-n_cores <- 12
-cluster <- makeCluster(n_cores)
-registerDoParallel(cluster)
+# library(foreach)
+# library(doParallel)
+# 
+# n_cores <- 12
+# cluster <- makeCluster(n_cores)
+# registerDoParallel(cluster)
 
 # sampling ----------------------------------------------------------------
 {
@@ -840,7 +838,7 @@ registerDoParallel(cluster)
 }
 
 # evaluate ----------------------------------------------------------------
-stopCluster(cl = cluster)
+# stopCluster(cl = cluster)
 
 print(endtime - starttime)
 
@@ -874,7 +872,7 @@ k <- 1
 # compare quantiles and means for all frequencies of k = 2
 plot(upper_q[1, k, ], type = "l", lty = 2, 
      ylim = c(0, max(Lambdakl0[1, k, 1:num_freqs])),
-     main = paste0("k = ", k))
+     main = paste0("post. mean and true Lambda, k = ", k))
 lines(lower_q[1, k, ], type = "l", lty = 2)
 lines(Lambda_means[1, k, ])
 lines(Lambdakl0[1, k, 1:num_freqs], lty = 3)
@@ -884,13 +882,15 @@ lines(lower_q[2, k, ], type = "l", lty = 2, , col = "red")
 lines(Lambda_means[2, k, ], , col = "red")
 lines(Lambdakl0[2, k, 1:num_freqs], lty = 3, , col = "red")
 
+save_plot_png(file.path(result_dir, "post-Lambda-and-true-1.png"))
+
 k <- 2
 
 # compare quantiles and means for all frequencies of k = 2
 plot(upper_q[1, k, ], type = "l", lty = 2, 
      # xlim = c(400, 510),
      ylim = c(0, max(Lambdakl0[1, k, 1:num_freqs])),
-     main = paste0("k = ", k)
+     main = paste0("post. mean and true Lambda, k = ", k)
 )
 lines(lower_q[1, k, ], type = "l", lty = 2)
 lines(Lambda_means[1, k, ])
@@ -900,6 +900,8 @@ lines(upper_q[2, k, ], type = "l", lty = 2, col = "red")
 lines(lower_q[2, k, ], type = "l", lty = 2, , col = "red")
 lines(Lambda_means[2, k, ], , col = "red")
 lines(Lambdakl0[2, k, 1:num_freqs], lty = 3, , col = "red")
+
+save_plot_png(file.path(result_dir, "post-Lambda-and-true-2.png"))
 
 # distances to true Ukl0 for all Ukl --------------------------------------
 
@@ -945,7 +947,9 @@ for (s in 1:gibbsIts) {
 }
 
 plot(d_to_avgUkl, type = "l",
-     main = paste0("k = ", k, ", l = ", l))
+     main = paste0("Trace plot, Ukl axis dist. to mean, k = ", k, ", l = ", l))
+save_plot_png(file.path(result_dir, 
+    paste0("post-Ukl-trace-axis-dist-k-", k, "-l-", l, ".png")))
 
 evec_Frob_stat(U_kl0[, , k, l], avgUkl, returnMats = TRUE)
 evec_Frob_stat(avgUkl, U_kl0[, , k, l], returnMats = TRUE)
@@ -968,14 +972,18 @@ for (s in 1:gibbsIts) {
 }
 
 plot(d_to_avgSigmal, type = "l",
-     main = paste0("l = ", l))
+     main = paste0("Trace plot, Sigmal dist to mean, l = ", l))
+save_plot_png(file.path(result_dir, 
+    paste0("post-Sigmal-trace-l-", l, ".png")))
 
 par(mfrow = c(2, 2), mar = c(2, 2, 2, 1))
 for(j in 1:4) {
     plot(Re(Sigmal_s[j, j, l, ]), type = "l", 
-         main = paste0("l = ", l, ", j = ", j),
+         main = paste0("Trace plot, Sigmal[j,j], l = ", l, ", j = ", j),
          xlab = "", ylab = "")
 }
+save_plot_png(file.path(result_dir, 
+    paste0("post-Sigmal-diag-trace-l-", l, "-j-", j, ".png")))
 
 par(mfrow = c(1, 1), mar = c(5.1, 4.1, 4.1, 2.1))
 
@@ -996,18 +1004,28 @@ median(taujkl2_s[2, 1, 150, gibbsPostBurn])
 median(taujkl2_s[1, 1, 256, gibbsPostBurn])
 median(taujkl2_s[1, 1, 350, gibbsPostBurn])
 
-# evaluate sigmakl2 -------------------------------------------------------
+# evaluate sigmak2 -------------------------------------------------------
 
 sigmak02[1]
 sigmak02[2]
+
+k <- 1
+sigmak02[k]
+quantile(sigmak2_s[k, gibbsPostBurn], c(.025, .5, .975))
+
+plot(sigmak2_s[k, ], type = "l",
+     main = paste0("Trace plot, sigmak2, k = ", k))
+abline(h = sigmak02[k])
+save_plot_png(file.path(result_dir, paste0("post-sigmak2-k-", k, ".png")))
 
 k <- 2
 sigmak02[k]
 quantile(sigmak2_s[k, gibbsPostBurn], c(.025, .5, .975))
 
 plot(sigmak2_s[k, ], type = "l",
-     main = paste0("k = ", k))
+     main = paste0("Trace plot, sigmak2, k = ", k))
 abline(h = sigmak02[k])
+save_plot_png(file.path(result_dir, paste0("post-sigmak2-k-", k, ".png")))
 
 # evaluate full SDM estimates ---------------------------------------------
 
@@ -1036,22 +1054,35 @@ for (k in 1:K) {
 summary(as.vector(posterior_dists))
 summary(as.vector(multitaper_dists))
 
+k <- 1
+quantile(as.vector(posterior_dists[k, ]), 
+         probs = c(0, .025, .5, .975, 1))
+quantile(as.vector(multitaper_dists[k, ]), 
+         probs = c(0, .025, .5, .975, 1))
+
+plot(density(as.vector(posterior_dists[k, ]), from = 0), col = 1,
+     main = "densities of SDM estimate distances",
+     xlab = "Frob. distance")
+lines(density(as.vector(multitaper_dists[k, ]), from = 0), col = 2)
+legend(x = "topright", legend = c("posterior", "multitaper"),
+       col = c(1, 2), lwd = 2)
+save_plot_png(file.path(result_dir, 
+    paste0("post-SDM-est-dist-density-k-", k, ".png")))
+    
 k <- 2
 quantile(as.vector(posterior_dists[k, ]), 
          probs = c(0, .025, .5, .975, 1))
 quantile(as.vector(multitaper_dists[k, ]), 
          probs = c(0, .025, .5, .975, 1))
 
-# qqplot(as.vector(posterior_dists), 
-#        as.vector(multitaper_dists))
-# abline(0, 1, lty = 2)
-
 plot(density(as.vector(posterior_dists[k, ]), from = 0), col = 1,
-     main = "densities of estimate distances",
+     main = "densities of SDM estimate distances",
      xlab = "Frob. distance")
 lines(density(as.vector(multitaper_dists[k, ]), from = 0), col = 2)
 legend(x = "topright", legend = c("posterior", "multitaper"),
        col = c(1, 2), lwd = 2)
+save_plot_png(file.path(result_dir, 
+    paste0("post-SDM-est-dist-density-k-", k, ".png")))
 
 k <- 1
 l <- 75
