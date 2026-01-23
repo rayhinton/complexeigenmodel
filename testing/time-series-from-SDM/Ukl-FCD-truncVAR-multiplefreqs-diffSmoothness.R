@@ -1,3 +1,8 @@
+if (!interactive()) {
+    pdf(tempfile(fileext = ".pdf"))
+    dev.control("enable")
+}
+
 source("testing/time-series-from-SDM/model-simulation-parameters.R")
 
 source("functions/utility.R")
