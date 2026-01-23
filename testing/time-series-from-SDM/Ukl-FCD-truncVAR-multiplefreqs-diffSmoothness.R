@@ -114,10 +114,18 @@ logdet <- function(X) {
     return( log(EigenR::Eigen_det(X)) )
 }
 
-save_plot_png <- function(plot_path) {
-    dev.copy(png, plot_path, 
-             width = 1600, height = 900, res = 150)
-    dev.off()
+save_plot_png <- function(plot_path, width = 1600, height = 900, res = 150) {
+    p <- recordPlot()
+    png(plot_path, width = width, height = height, res = res)
+    replayPlot(p)
+    dev.off()    
+}
+
+log_and_print_obj <- function(x) {
+    print(x)
+    sink(file.path(result_dir, "output.txt"), append = TRUE)
+    print(x)
+    sink()
 }
 
 # setup -------------------------------------------------------------------
@@ -245,13 +253,15 @@ max(abs(Im(Yts)))
 # set Y to the real components, only
 Yts <- Re(Yts)
 
-plot(Yts[1, 1, ], type = "l", main = "Observed time series 1")
+plot(Yts[1, 1, ], type = "l", main = "Observed time series 1",
+     ylab = "Y", xlab = "t")
 lines(Yts[2, 1, ], col = 2)
 lines(Yts[3, 1, ], col = 3)
 lines(Yts[4, 1, ], col = 4)
 save_plot_png(file.path(result_dir, "observed-TS-1.png"))
 
-plot(Yts[1, 2, ], type = "l", main = "Observed time series 2")
+plot(Yts[1, 2, ], type = "l", main = "Observed time series 2",
+     ylab = "Y", xlab = "t")
 lines(Yts[2, 2, ], col = 2)
 lines(Yts[3, 2, ], col = 3)
 lines(Yts[4, 2, ], col = 4)
@@ -872,7 +882,8 @@ k <- 1
 # compare quantiles and means for all frequencies of k = 2
 plot(upper_q[1, k, ], type = "l", lty = 2, 
      ylim = c(0, max(Lambdakl0[1, k, 1:num_freqs])),
-     main = paste0("post. mean and true Lambda, k = ", k))
+     main = paste0("post. mean and true Lambda, k = ", k),
+     ylab = "Lambda")
 lines(lower_q[1, k, ], type = "l", lty = 2)
 lines(Lambda_means[1, k, ])
 lines(Lambdakl0[1, k, 1:num_freqs], lty = 3)
@@ -890,8 +901,8 @@ k <- 2
 plot(upper_q[1, k, ], type = "l", lty = 2, 
      # xlim = c(400, 510),
      ylim = c(0, max(Lambdakl0[1, k, 1:num_freqs])),
-     main = paste0("post. mean and true Lambda, k = ", k)
-)
+     main = paste0("post. mean and true Lambda, k = ", k),
+     ylab = "Lambda")
 lines(lower_q[1, k, ], type = "l", lty = 2)
 lines(Lambda_means[1, k, ])
 lines(Lambdakl0[1, k, 1:num_freqs], lty = 3)
@@ -947,7 +958,8 @@ for (s in 1:gibbsIts) {
 }
 
 plot(d_to_avgUkl, type = "l",
-     main = paste0("Trace plot, Ukl axis dist. to mean, k = ", k, ", l = ", l))
+     main = paste0("Trace plot, Ukl axis dist. to mean, k = ", k, ", l = ", l),
+     ylab = "axis Frobenius dist.")
 save_plot_png(file.path(result_dir, 
     paste0("post-Ukl-trace-axis-dist-k-", k, "-l-", l, ".png")))
 
@@ -972,7 +984,8 @@ for (s in 1:gibbsIts) {
 }
 
 plot(d_to_avgSigmal, type = "l",
-     main = paste0("Trace plot, Sigmal dist to mean, l = ", l))
+     main = paste0("Trace plot, Sigmal dist. to mean, l = ", l),
+     ylab = "Frobenius dist.")
 save_plot_png(file.path(result_dir, 
     paste0("post-Sigmal-trace-l-", l, ".png")))
 
@@ -1014,7 +1027,8 @@ sigmak02[k]
 quantile(sigmak2_s[k, gibbsPostBurn], c(.025, .5, .975))
 
 plot(sigmak2_s[k, ], type = "l",
-     main = paste0("Trace plot, sigmak2, k = ", k))
+     main = paste0("Trace plot, sigmak2, k = ", k),
+     ylab = "sigmak2")
 abline(h = sigmak02[k])
 save_plot_png(file.path(result_dir, paste0("post-sigmak2-k-", k, ".png")))
 
@@ -1023,7 +1037,8 @@ sigmak02[k]
 quantile(sigmak2_s[k, gibbsPostBurn], c(.025, .5, .975))
 
 plot(sigmak2_s[k, ], type = "l",
-     main = paste0("Trace plot, sigmak2, k = ", k))
+     main = paste0("Trace plot, sigmak2, k = ", k),
+     ylab = "sigmak2")
 abline(h = sigmak02[k])
 save_plot_png(file.path(result_dir, paste0("post-sigmak2-k-", k, ".png")))
 
@@ -1062,7 +1077,7 @@ quantile(as.vector(multitaper_dists[k, ]),
 
 plot(density(as.vector(posterior_dists[k, ]), from = 0), col = 1,
      main = "densities of SDM estimate distances",
-     xlab = "Frob. distance")
+     xlab = "Frob. distance", ylab = "density")
 lines(density(as.vector(multitaper_dists[k, ]), from = 0), col = 2)
 legend(x = "topright", legend = c("posterior", "multitaper"),
        col = c(1, 2), lwd = 2)
@@ -1077,7 +1092,7 @@ quantile(as.vector(multitaper_dists[k, ]),
 
 plot(density(as.vector(posterior_dists[k, ]), from = 0), col = 1,
      main = "densities of SDM estimate distances",
-     xlab = "Frob. distance")
+     xlab = "Frob. distance", ylab = "density")
 lines(density(as.vector(multitaper_dists[k, ]), from = 0), col = 2)
 legend(x = "topright", legend = c("posterior", "multitaper"),
        col = c(1, 2), lwd = 2)
