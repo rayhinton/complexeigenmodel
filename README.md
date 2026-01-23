@@ -2,6 +2,12 @@
 
 In collaboration with Dr. Scott Bruce, Dr. Jamshid Namdari, and Dr. Brani Vidakovic.
 
+# Requirements
+
+- EigenR
+- waveslim
+- astsa
+
 # Credit
 
 - `uni.slice` slice sampling function: Neal, Radford, M. [GitHub: unislice](https://github.com/radfordneal/unislice).

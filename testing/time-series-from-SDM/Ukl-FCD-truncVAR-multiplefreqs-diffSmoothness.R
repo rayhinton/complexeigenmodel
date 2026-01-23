@@ -114,9 +114,15 @@ logdet <- function(X) {
     return( log(EigenR::Eigen_det(X)) )
 }
 
-save_plot_png <- function(plot_path, width = 1600, height = 900, res = 150) {
+# save_plot_png <- function(plot_path, width = 1600, height = 900, res = 300) {
+#     p <- recordPlot()
+#     png(plot_path, width = width, height = height, res = res, type = "Xlib")
+#     replayPlot(p)
+#     dev.off()    
+# }
+save_plot_pdf <- function(plot_path, width = 6, height = 4) {
     p <- recordPlot()
-    png(plot_path, width = width, height = height, res = res, type = "cairo")
+    pdf(plot_path, width = width, height = height)
     replayPlot(p)
     dev.off()    
 }
@@ -201,14 +207,14 @@ plot(Lambdakl0[1, k, 1:num_freqs], type = "l", ylab = "lambda",
      main = paste0("True Lambda, k = ", k), 
      ylim = c(0, max(Lambdakl0[, k, ])))
 lines(Lambdakl0[2, k, 1:num_freqs], col = 2)
-save_plot_png(file.path(result_dir, "trueLambda_1.png"))
+save_plot_pdf(file.path(result_dir, "trueLambda_1.pdf"))
 
 k <- 2
 plot(Lambdakl0[1, k, 1:num_freqs], type = "l", ylab = "lambda",
      main = paste0("True Lambda, k = ", k), 
      ylim = c(0, max(Lambdakl0[, k, ])))
 lines(Lambdakl0[2, k, 1:num_freqs], col = 2)
-save_plot_png(file.path(result_dir, "trueLambda_2.png"))
+save_plot_pdf(file.path(result_dir, "trueLambda_2.pdf"))
 
 # calculate Cholesky decompositions ---------------------------------------
 
@@ -258,14 +264,14 @@ plot(Yts[1, 1, ], type = "l", main = "Observed time series 1",
 lines(Yts[2, 1, ], col = 2)
 lines(Yts[3, 1, ], col = 3)
 lines(Yts[4, 1, ], col = 4)
-save_plot_png(file.path(result_dir, "observed-TS-1.png"))
+save_plot_pdf(file.path(result_dir, "observed-TS-1.pdf"))
 
 plot(Yts[1, 2, ], type = "l", main = "Observed time series 2",
      ylab = "Y", xlab = "t")
 lines(Yts[2, 2, ], col = 2)
 lines(Yts[3, 2, ], col = 3)
 lines(Yts[4, 2, ], col = 4)
-save_plot_png(file.path(result_dir, "observed-TS-2.png"))
+save_plot_pdf(file.path(result_dir, "observed-TS-2.pdf"))
 
 # estimate SDMs -----------------------------------------------------------
 
@@ -330,7 +336,7 @@ lines(Re(fkTR[2, 2, 1, 1:num_freqs]), col = 2, lty = 2)
 lines(Re(fkTR[3, 3, 1, 1:num_freqs]), col = 3, lty = 2)
 lines(Re(fkTR[4, 4, 1, 1:num_freqs]), col = 4, lty = 2)
 
-save_plot_png(file.path(result_dir, "SDM-est-and-true-1.png"))
+save_plot_pdf(file.path(result_dir, "SDM-est-and-true-1.pdf"))
 
 plot(Re(SDMests[[2]][1,1, ]), type = "l", ylim = c(0, max(Re(SDMests[[2]]))),
      ylab = "spectral density", 
@@ -344,7 +350,7 @@ lines(Re(fkTR[2, 2, 2, 1:num_freqs]), col = 2, lty = 2)
 lines(Re(fkTR[3, 3, 2, 1:num_freqs]), col = 3, lty = 2)
 lines(Re(fkTR[4, 4, 2, 1:num_freqs]), col = 4, lty = 2)
 
-save_plot_png(file.path(result_dir, "SDM-est-and-true-2.png"))
+save_plot_pdf(file.path(result_dir, "SDM-est-and-true-2.pdf"))
 
 # initialize arrays -------------------------------------------------------
 
@@ -893,7 +899,7 @@ lines(lower_q[2, k, ], type = "l", lty = 2, , col = "red")
 lines(Lambda_means[2, k, ], , col = "red")
 lines(Lambdakl0[2, k, 1:num_freqs], lty = 3, , col = "red")
 
-save_plot_png(file.path(result_dir, "post-Lambda-and-true-1.png"))
+save_plot_pdf(file.path(result_dir, "post-Lambda-and-true-1.pdf"))
 
 k <- 2
 
@@ -912,7 +918,7 @@ lines(lower_q[2, k, ], type = "l", lty = 2, , col = "red")
 lines(Lambda_means[2, k, ], , col = "red")
 lines(Lambdakl0[2, k, 1:num_freqs], lty = 3, , col = "red")
 
-save_plot_png(file.path(result_dir, "post-Lambda-and-true-2.png"))
+save_plot_pdf(file.path(result_dir, "post-Lambda-and-true-2.pdf"))
 
 # distances to true Ukl0 for all Ukl --------------------------------------
 
@@ -960,8 +966,8 @@ for (s in 1:gibbsIts) {
 plot(d_to_avgUkl, type = "l",
      main = paste0("Trace plot, Ukl axis dist. to mean, k = ", k, ", l = ", l),
      ylab = "axis Frobenius dist.")
-save_plot_png(file.path(result_dir, 
-    paste0("post-Ukl-trace-axis-dist-k-", k, "-l-", l, ".png")))
+save_plot_pdf(file.path(result_dir, 
+    paste0("post-Ukl-trace-axis-dist-k-", k, "-l-", l, ".pdf")))
 
 evec_Frob_stat(U_kl0[, , k, l], avgUkl, returnMats = TRUE)
 evec_Frob_stat(avgUkl, U_kl0[, , k, l], returnMats = TRUE)
@@ -986,8 +992,8 @@ for (s in 1:gibbsIts) {
 plot(d_to_avgSigmal, type = "l",
      main = paste0("Trace plot, Sigmal dist. to mean, l = ", l),
      ylab = "Frobenius dist.")
-save_plot_png(file.path(result_dir, 
-    paste0("post-Sigmal-trace-l-", l, ".png")))
+save_plot_pdf(file.path(result_dir, 
+    paste0("post-Sigmal-trace-l-", l, ".pdf")))
 
 par(mfrow = c(2, 2), mar = c(2, 2, 2, 1))
 for(j in 1:4) {
@@ -995,8 +1001,8 @@ for(j in 1:4) {
          main = paste0("Trace plot, Sigmal[j,j], l = ", l, ", j = ", j),
          xlab = "", ylab = "")
 }
-save_plot_png(file.path(result_dir, 
-    paste0("post-Sigmal-diag-trace-l-", l, "-j-", j, ".png")))
+save_plot_pdf(file.path(result_dir, 
+    paste0("post-Sigmal-diag-trace-l-", l, "-j-", j, ".pdf")))
 
 par(mfrow = c(1, 1), mar = c(5.1, 4.1, 4.1, 2.1))
 
@@ -1030,7 +1036,7 @@ plot(sigmak2_s[k, ], type = "l",
      main = paste0("Trace plot, sigmak2, k = ", k),
      ylab = "sigmak2")
 abline(h = sigmak02[k])
-save_plot_png(file.path(result_dir, paste0("post-sigmak2-k-", k, ".png")))
+save_plot_pdf(file.path(result_dir, paste0("post-sigmak2-k-", k, ".pdf")))
 
 k <- 2
 sigmak02[k]
@@ -1040,7 +1046,7 @@ plot(sigmak2_s[k, ], type = "l",
      main = paste0("Trace plot, sigmak2, k = ", k),
      ylab = "sigmak2")
 abline(h = sigmak02[k])
-save_plot_png(file.path(result_dir, paste0("post-sigmak2-k-", k, ".png")))
+save_plot_pdf(file.path(result_dir, paste0("post-sigmak2-k-", k, ".pdf")))
 
 # evaluate full SDM estimates ---------------------------------------------
 
@@ -1081,8 +1087,8 @@ plot(density(as.vector(posterior_dists[k, ]), from = 0), col = 1,
 lines(density(as.vector(multitaper_dists[k, ]), from = 0), col = 2)
 legend(x = "topright", legend = c("posterior", "multitaper"),
        col = c(1, 2), lwd = 2)
-save_plot_png(file.path(result_dir, 
-    paste0("post-SDM-est-dist-density-k-", k, ".png")))
+save_plot_pdf(file.path(result_dir, 
+    paste0("post-SDM-est-dist-density-k-", k, ".pdf")))
     
 k <- 2
 quantile(as.vector(posterior_dists[k, ]), 
@@ -1096,8 +1102,8 @@ plot(density(as.vector(posterior_dists[k, ]), from = 0), col = 1,
 lines(density(as.vector(multitaper_dists[k, ]), from = 0), col = 2)
 legend(x = "topright", legend = c("posterior", "multitaper"),
        col = c(1, 2), lwd = 2)
-save_plot_png(file.path(result_dir, 
-    paste0("post-SDM-est-dist-density-k-", k, ".png")))
+save_plot_pdf(file.path(result_dir, 
+    paste0("post-SDM-est-dist-density-k-", k, ".pdf")))
 
 k <- 1
 l <- 75
