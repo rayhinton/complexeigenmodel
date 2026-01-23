@@ -116,7 +116,7 @@ logdet <- function(X) {
 
 save_plot_png <- function(plot_path, width = 1600, height = 900, res = 150) {
     p <- recordPlot()
-    png(plot_path, width = width, height = height, res = res)
+    png(plot_path, width = width, height = height, res = res, type = "cairo")
     replayPlot(p)
     dev.off()    
 }
