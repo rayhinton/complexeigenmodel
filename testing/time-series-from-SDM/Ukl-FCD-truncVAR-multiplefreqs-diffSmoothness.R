@@ -696,7 +696,16 @@ accCount_Sigma_s[, 1] <- TRUE
         for (l in 1:num_freqs) {
         # this_Sigma_result <- foreach(l = 1:num_freqs) %dopar% {
             Sigmap <- rFTCW(result_Sigmals[, , l], n_Sig[l], P, TRUE, TRUE)
-            invSigmap <- solve(Sigmap)
+            # invSigmap <- solve(Sigmap)
+            
+            invSigmap <- tryCatch(
+                solve(Sigmap),
+                error = function(e) {
+                    cat("Singularity at l =", l, ", n_sig =", n_sig[l], "\n")
+                    print(Sigmap)
+                    print(eigen(Sigmap))
+                    stop(e)
+                    })
             
             Sigmals <- result_Sigmals[, , l]
             invSigmals <- result_invSigmals[, , l]
@@ -853,6 +862,10 @@ accCount_Sigma_s[, 1] <- TRUE
                 pmax(round(n_Sig[curr_Sigmal_acc_rate >= .45] / 4), P+1)
             n_Sig[curr_Sigmal_acc_rate <= .15] <- 
                 n_Sig[curr_Sigmal_acc_rate <= .15] * 2
+            
+            if (show_n_Sig_summary) {
+                print(summary(n_Sig))
+            }
             
         } 
         
