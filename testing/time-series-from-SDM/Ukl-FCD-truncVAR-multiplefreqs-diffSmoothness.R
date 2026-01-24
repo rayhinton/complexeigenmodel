@@ -701,9 +701,11 @@ accCount_Sigma_s[, 1] <- TRUE
             invSigmap <- tryCatch(
                 solve(Sigmap),
                 error = function(e) {
-                    cat("Singularity at l =", l, ", n_sig =", n_Sig[l], "\n")
-                    print(Sigmap)
-                    print(eigen(Sigmap))
+                    cat("Singularity at l =", l, ", n_Sig =", n_Sig[l], "\n")
+                    # eigenvalues of proposed Sigma
+                    print(eigen(Sigmap)$values)
+                    # eigenvalues of the previous Sigma
+                    print(eigen(result_Sigmals[, , l])$values)
                     stop(e)
                     })
             
