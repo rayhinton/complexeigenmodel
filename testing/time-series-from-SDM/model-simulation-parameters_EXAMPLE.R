@@ -38,7 +38,7 @@ m <- 2
 # tau_Uk <- rep(.1, K)
 tau_Ukl <- array(0.1, c(K, num_freqs))
 num_tau_check <- 20
-show_tau_tune_summ <- TRUE
+show_tau_tune_summ <- FALSE
 doCayleyZeros <- FALSE
 CayleyZeroProb <- 0.5
 

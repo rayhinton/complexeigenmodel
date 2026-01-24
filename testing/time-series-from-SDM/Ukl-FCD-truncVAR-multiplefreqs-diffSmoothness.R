@@ -806,7 +806,9 @@ accCount_Sigma_s[, 1] <- TRUE
                 apply(accCount_s[, , (s - tau_numin + 1):s], c(1, 2), mean)
             
             # print(tau_Ukl[curr_Ukl_acc_rate == 0])
-            print(which(curr_Ukl_acc_rate == 0))
+            if (show_tau_tune_summ) {
+                print(which(curr_Ukl_acc_rate == 0))
+            }
             
             tau_Ukl[curr_Ukl_acc_rate >= .45] <-
                 tau_Ukl[curr_Ukl_acc_rate >= .45] * 2
