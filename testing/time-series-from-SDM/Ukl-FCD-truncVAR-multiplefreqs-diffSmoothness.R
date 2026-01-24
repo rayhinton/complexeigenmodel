@@ -701,7 +701,7 @@ accCount_Sigma_s[, 1] <- TRUE
             invSigmap <- tryCatch(
                 solve(Sigmap),
                 error = function(e) {
-                    cat("Singularity at l =", l, ", n_sig =", n_sig[l], "\n")
+                    cat("Singularity at l =", l, ", n_sig =", n_Sig[l], "\n")
                     print(Sigmap)
                     print(eigen(Sigmap))
                     stop(e)
@@ -864,7 +864,10 @@ accCount_Sigma_s[, 1] <- TRUE
                 n_Sig[curr_Sigmal_acc_rate <= .15] * 2
             
             if (show_n_Sig_summary) {
+                print("Summary of n_Sig tuning par.:")
                 print(summary(n_Sig))
+                print("Summary of recent Sigmal acc. rates:")
+                print(summary(curr_Sigmal_acc_rate))
             }
             
         } 
