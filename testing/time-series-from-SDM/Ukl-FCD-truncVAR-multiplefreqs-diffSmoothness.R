@@ -861,7 +861,8 @@ accCount_Sigma_s[, 1] <- TRUE
                 rowMeans(accCount_Sigma_s[, (s - tau_numin + 1):s])
             
             n_Sig[curr_Sigmal_acc_rate >= .45] <- 
-                pmax(round(n_Sig[curr_Sigmal_acc_rate >= .45] / 4), P+1)
+                # pmax(round(n_Sig[curr_Sigmal_acc_rate >= .45] / 4), P+1)
+                pmax(round(n_Sig[curr_Sigmal_acc_rate >= .45] / 4), P-0.5)
             n_Sig[curr_Sigmal_acc_rate <= .15] <- 
                 n_Sig[curr_Sigmal_acc_rate <= .15] * 2
             
