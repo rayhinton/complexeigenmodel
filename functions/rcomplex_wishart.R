@@ -44,7 +44,8 @@ rcomplex_wishart <- function(df, Sigma, useEigenR = FALSE, byCholesky = FALSE, H
 
     # calculate square root of Sigma
     if (useEigenR) {
-        C <- EigenR::Eigen_sqrt(Sigma)
+        # C <- EigenR::Eigen_sqrt(Sigma)
+        C <- EigenR::Eigen_Chol(Sigma)
     } else {
         Sigmaevd <- eigen(Sigma)
         
@@ -65,7 +66,7 @@ rcomplex_wishart <- function(df, Sigma, useEigenR = FALSE, byCholesky = FALSE, H
         
         # TODO get rid of t Conj, since C is Hermitian?
         # for small matrices, it can be faster
-        W <- C %*% WI %*% C
+        W <- t(Conj(C)) %*% WI %*% C
         
     } else {
         # Generate standard complex normal matrix (real and imaginary parts are independent normal)
