@@ -696,7 +696,7 @@ accCount_Sigma_s[, 1] <- TRUE
         for (l in 1:num_freqs) {
         # this_Sigma_result <- foreach(l = 1:num_freqs) %dopar% {
             # Sigmap <- rFTCW(result_Sigmals[, , l], n_Sig[l], P, TRUE, TRUE)
-            Sigmap <- rFTCW(result_Sigmals[, , l] + .1*diag(P), n_Sig[l], P, TRUE, TRUE)
+            Sigmap <- rFTCW(result_Sigmals[, , l] + Sigma_add*diag(P), n_Sig[l], P, TRUE, TRUE)
             # invSigmap <- solve(Sigmap)
             
             invSigmap <- tryCatch(
@@ -738,16 +738,16 @@ accCount_Sigma_s[, 1] <- TRUE
 #                P*n_Sig[l] * log( Re(sum(t(invSigmals) * Sigmap )) )
                 
             logdens_num <- -d*K* logdet(Sigmap) - P * sumlog_p - 
-                n_Sig[l] * logdet(Sigmap + .1*diag(P)) + # Sigmap is the parameter
+                n_Sig[l] * logdet(Sigmap + Sigma_add*diag(P)) + # Sigmap is the parameter
                 (n_Sig[l] - P) * logdet(Sigmals) - 
                 # P*n_Sig[l] * log( Re(sum(diag( invSigmap %*% Sigmals))) ) 
-                P*n_Sig[l] * log( Re(sum( t(solve(Sigmap + .1*diag(P))) * Sigmals )) ) # Sigmap is the parameter
+                P*n_Sig[l] * log( Re(sum( t(solve(Sigmap + Sigma_add*diag(P))) * Sigmals )) ) # Sigmap is the parameter
             
             logdens_den <- -d*K* logdet(Sigmals) - P * sumlog_s - 
-                n_Sig[l] * logdet(Sigmals + .1*diag(P)) + # Sigmals is the parameter
+                n_Sig[l] * logdet(Sigmals + Sigma_add*diag(P)) + # Sigmals is the parameter
                 (n_Sig[l] - P) * logdet(Sigmap) - 
                 # P*n_Sig[l] * log( Re(sum(diag( invSigmals %*% Sigmap ))) ) 
-                P*n_Sig[l] * log( Re(sum( t(solve(Sigmals + .1*diag(P))) * Sigmap )) ) # Sigmals is the parameter
+                P*n_Sig[l] * log( Re(sum( t(solve(Sigmals + Sigma_add*diag(P))) * Sigmap )) ) # Sigmals is the parameter
             
             logr <- Re(logdens_num - logdens_den)
             

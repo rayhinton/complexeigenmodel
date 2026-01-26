@@ -45,6 +45,7 @@ CayleyZeroProb <- 0.5
 
 ### Sigmal MH tuning parameters
 n_Sig <- rep(50, num_freqs)
+Sigma_add <- 0.001
 
 # grid of frequencies to calculate over
 omegaw <- seq(1/Tt, by = 1/Tt, length.out = num_freqs)
