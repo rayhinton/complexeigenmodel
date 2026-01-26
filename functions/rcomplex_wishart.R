@@ -45,7 +45,7 @@ rcomplex_wishart <- function(df, Sigma, useEigenR = FALSE, byCholesky = FALSE, H
     # calculate square root of Sigma
     if (useEigenR) {
         # C <- EigenR::Eigen_sqrt(Sigma)
-        C <- EigenR::Eigen_Chol(Sigma)
+        C <- EigenR::Eigen_chol(Sigma)
     } else {
         Sigmaevd <- eigen(Sigma)
         
