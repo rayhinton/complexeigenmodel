@@ -875,7 +875,7 @@ accCount_Sigma_s[, 1] <- TRUE
             
             n_Sig[curr_Sigmal_acc_rate >= .45] <- 
                 # pmax(round(n_Sig[curr_Sigmal_acc_rate >= .45] / 4), P+1)
-                pmax(round(n_Sig[curr_Sigmal_acc_rate >= .45] / 4), P-0.5)
+                pmax(round(n_Sig[curr_Sigmal_acc_rate >= .45] / 4), P)
             n_Sig[curr_Sigmal_acc_rate <= .15] <- 
                 n_Sig[curr_Sigmal_acc_rate <= .15] * 2
             
