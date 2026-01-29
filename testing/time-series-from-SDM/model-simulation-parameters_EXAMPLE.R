@@ -17,6 +17,8 @@ Tt <- 1024 # length of time series
 LL <- round(sqrt(Tt))
 # LL <- round(P+1)
 
+use_true_SDMs <- TRUE
+
 # options include: 1RW, 2RWPN
 Lambda_prior <- "2RWPN"
 

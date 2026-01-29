@@ -316,12 +316,12 @@ for (w in 1:num_freqs){
     data_list <- list()
     
     for (k in 1:K) {
-        # use the estimated SDM
-        data_list[[k]] <- LL * SDMests[[k]][, , w]
-        
-        # use the true SDM
-        # data_list[[k]] <- LL * fkTR[, , k, w]
-        
+        if (use_true_SDMs) {
+            # use the true SDM
+            data_list[[k]] <- LL * fkTR[, , k, w]
+        } else {
+            data_list[[k]] <- LL * SDMests[[k]][, , w]
+        }
     }
     
     data_list_w[[w]] <- data_list
