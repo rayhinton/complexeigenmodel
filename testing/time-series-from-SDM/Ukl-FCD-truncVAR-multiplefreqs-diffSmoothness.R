@@ -389,8 +389,8 @@ sigmak2_s[, 1] <- sigmak02
 Sigmal_s <- array(NA, c(P, P, num_freqs, gibbsIts))
 
 if (use_Id_Sigmal_init) {
-    Sigmal_s[, , , 1] <- diag(P)
-    result_Sigmals <- diag(P)    
+    Sigmal_s[, , , 1] <- array(diag(P), c(P, P, num_freqs))
+    result_Sigmals <- array(diag(P), c(P, P, num_freqs))    
 } else {
     Sigmal_s[, , , 1] <- Sigmal0
     result_Sigmals <- Sigmal0
