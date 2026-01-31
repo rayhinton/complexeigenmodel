@@ -164,10 +164,15 @@ file.copy("testing/time-series-from-SDM/model-simulation-parameters.R",
 set.seed(parseed)
 
 VARpars <- array(NA, c(P, P, K))
-# for (k in 1:K) {
-#     VARpars[, , k] <- generate_VAR1_coef(P, 0.8)
-# }
-VARpars[, , 1:K] <- generate_VAR1_coef(P, 0.8)
+if (all_same_VAR_pars) { 
+    VARpars[, , 1:K] <- generate_VAR1_coef(P, 0.8)
+} else {
+    for (k in 1:K) {
+        VARpars[, , k] <- generate_VAR1_coef(P, 0.8)
+    }
+}
+
+
 noiseSigma <- generate_AR1_covariance(P, sigma2 = 1, rho = 0.5)
 
 # sigmak02, scale parameter
