@@ -143,9 +143,16 @@ log_and_print_obj <- function(x) {
 
 # the parameters file is run above
 
+job_id <- Sys.getenv("SLURM_JOB_ID")
+
 # Create timestamped results directory
 timestamp <- format(Sys.time(), "%Y%m%d-%H%M%S")
-result_dir <- file.path("results", paste0("full-SDM-diffSmoothness_", timestamp))
+
+result_dir <- file.path("results",
+                        paste("full-SDM-diffSmoothness", job_id, timestamp, 
+                              sep = "_"))
+result_dir <- gsub("__", "_", result_dir)
+
 dir.create(result_dir, recursive = TRUE)
 
 # save the parameters file in the results directory, for later reference
