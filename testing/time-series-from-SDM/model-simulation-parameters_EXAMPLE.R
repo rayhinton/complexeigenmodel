@@ -17,7 +17,8 @@ Tt <- 1024 # length of time series
 LL <- round(sqrt(Tt))
 # LL <- round(P+1)
 
-use_true_SDMs <- TRUE
+use_true_SDMs <- FALSE
+use_Id_Sigmal_init <- FALSE
 
 # options include: 1RW, 2RWPN
 Lambda_prior <- "2RWPN"

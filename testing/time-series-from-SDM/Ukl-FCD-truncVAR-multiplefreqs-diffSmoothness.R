@@ -380,8 +380,15 @@ sigmak2_s <- array(NA, c(K, gibbsIts))
 sigmak2_s[, 1] <- sigmak02
 
 Sigmal_s <- array(NA, c(P, P, num_freqs, gibbsIts))
-Sigmal_s[, , , 1] <- Sigmal0
-result_Sigmals <- Sigmal0
+
+if (use_Id_Sigmal_init) {
+    Sigmal_s[, , , 1] <- diag(P)
+    result_Sigmals <- diag(P)    
+} else {
+    Sigmal_s[, , , 1] <- Sigmal0
+    result_Sigmals <- Sigmal0
+}
+
 result_invSigmals <- array(NA, c(P, P, num_freqs))
 for (l in 1:num_freqs) {
     result_invSigmals[, , l] <- solve(result_Sigmals[, , l])
