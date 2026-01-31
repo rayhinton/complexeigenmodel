@@ -628,6 +628,10 @@ accCount_Sigma_s[, 1] <- TRUE
         accCount <- array(TRUE, c(K, num_freqs))
         newU_kls <- array(NA, c(P, d, K, num_freqs))
         
+        if (sample_true_Ukl0) {
+            newU_kls <- U_kl0[, , , 1:num_freqs]
+        } else {
+        
         # during sample, 1:K, 1:num_freqs
         
         # result_list_Uk <- foreach(k = 1:K) %dopar% {
@@ -698,6 +702,8 @@ accCount_Sigma_s[, 1] <- TRUE
         #     accCount_s[k, , s] <- result_list_Uk[[k]]$acc
         # }
         
+        } # end of conditional to randomly sample Ukl
+            
         U_kls_all[, , , , s] <- newU_kls
         accCount_s[, , s] <- accCount
         

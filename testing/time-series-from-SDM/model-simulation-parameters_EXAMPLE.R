@@ -19,6 +19,7 @@ LL <- round(sqrt(Tt))
 
 use_true_SDMs <- FALSE
 use_Id_Sigmal_init <- FALSE
+sample_true_Ukl0 <- FALSE
 
 # options include: 1RW, 2RWPN
 Lambda_prior <- "2RWPN"
