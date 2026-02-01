@@ -3,6 +3,7 @@
 source("/home/rayhinton/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/functions/utility.R")
 
 library(splines)
+library(expm)
 
 # functions ---------------------------------------------------------------
 
@@ -28,9 +29,70 @@ generate_smooth_positive_function <- function(N = 100, n_knots = 7,
     return(list(x = x, f = f, knot_locs = knot_locs, log_y_knots = log_y_knots))
 }
 
+library(expm)
+
+generate_smooth_Uk <- function(P, d, K, Tt, n_basis = 3, scale_base = 0.5, scale_k = 0.1) {
+    
+    Uk <- array(NA_complex_, c(P, d, K, Tt))
+    
+    # Frequencies from 0 to π
+    n_freq <- Tt/2 + 1
+    omega <- 2 * pi * (0:(Tt/2)) / Tt
+    
+    # Random real orthonormal starting point
+    U_0 <- qr.Q(qr(matrix(rnorm(P * d), P, d)))
+    
+    # Coefficient matrices for smooth base path
+    C_R <- array(0, c(P, P, n_basis))  # skew-symmetric
+    C_S <- array(0, c(P, P, n_basis))  # symmetric
+    
+    for (j in 1:n_basis) {
+        temp <- matrix(rnorm(P^2), P, P) * scale_base
+        C_R[,,j] <- (temp - t(temp)) / 2
+        temp <- matrix(rnorm(P^2), P, P) * scale_base
+        C_S[,,j] <- (temp + t(temp)) / 2
+    }
+    
+    # Compute base path U*(ω)
+    U_star <- array(NA_complex_, c(P, d, n_freq))
+    
+    for (idx in 1:n_freq) {
+        om <- omega[idx]
+        A <- matrix(0 + 0i, P, P)
+        for (j in 1:n_basis) {
+            A <- A + cos(j * om) * C_R[,,j]
+            A <- A + 1i * sin(j * om) * C_S[,,j]  # vanishes at 0 and π
+        }
+        U_star[,,idx] <- expm(A) %*% U_0
+    }
+    
+    # Series-specific rotations (real skew-symmetric preserves real-ness at boundaries)
+    for (k in 1:K) {
+        temp <- matrix(rnorm(P^2), P, P) * scale_k
+        A_k <- (temp - t(temp)) / 2
+        Q_k <- expm(A_k)
+        
+        for (idx in 1:n_freq) {
+            U_k_omega <- Q_k %*% U_star[,,idx]
+            
+            if (idx == 1) {
+                Uk[,,k,Tt] <- Re(U_k_omega)
+            } else if (idx == n_freq) {
+                Uk[,,k,Tt/2] <- Re(U_k_omega)
+            } else {
+                t_idx <- idx - 1
+                Uk[,,k,t_idx] <- U_k_omega
+                Uk[,,k,Tt - t_idx] <- Conj(U_k_omega)
+            }
+        }
+    }
+    
+    return(Uk)
+}
+
 # setup -------------------------------------------------------------------
 
-Tt <- 512
+Tt <- 1024
 P <- 4
 d <- 2
 K <- 2
@@ -49,19 +111,24 @@ sigmak2 <- rgamma(K, 1, 1)
 
 # generate Uks ------------------------------------------------------------
 
-Uk <- array(NA, c(P, d, K, Tt))
+# generate_smooth_Uk <- function(P, d, K, Tt, n_basis = 3, scale_base = 0.5, scale_k = 0.1) {
 
-for (t in 1:(Tt/2 - 1)) {
-    for (k in 1:K) {
-        Uk[, , k, t] <- rCMACG(P, d, diag(P))
-        Uk[, , k, Tt - t] <- Conj(Uk[, , k, t])
-    }
-}
+Uk <- generate_smooth_Uk(P, d, K, Tt)
+dim(Uk)
 
-for (k in 1:K) {
-    Uk[, , k, Tt/2] <- rMACG(P, d, diag(P))
-    Uk[, , k, Tt] <- rMACG(P, d, diag(P))
-}
+# Uk <- array(NA, c(P, d, K, Tt))
+# 
+# for (t in 1:(Tt/2 - 1)) {
+#     for (k in 1:K) {
+#         Uk[, , k, t] <- rCMACG(P, d, diag(P))
+#         Uk[, , k, Tt - t] <- Conj(Uk[, , k, t])
+#     }
+# }
+# 
+# for (k in 1:K) {
+#     Uk[, , k, Tt/2] <- rMACG(P, d, diag(P))
+#     Uk[, , k, Tt] <- rMACG(P, d, diag(P))
+# }
 
 # generate Lambdas --------------------------------------------------------
 
@@ -101,15 +168,15 @@ for (k in 1:K) {
 
 # plot the diagonal entries for K = 1
 plot(Re(Sl[1, 1, 1, ]), type = "l")
-plot(Re(Sl[2, 2, 1, ]), type = "l")
-plot(Re(Sl[3, 3, 1, ]), type = "l")
-plot(Re(Sl[4, 4, 1, ]), type = "l")
+lines(Re(Sl[2, 2, 1, ]), col = 2)
+lines(Re(Sl[3, 3, 1, ]), col = 3)
+lines(Re(Sl[4, 4, 1, ]), col = 4)
 
 # plot the diagonal entries for K = 2
 plot(Re(Sl[1, 1, 2, ]), type = "l")
-plot(Re(Sl[2, 2, 2, ]), type = "l")
-plot(Re(Sl[3, 3, 2, ]), type = "l")
-plot(Re(Sl[4, 4, 2, ]), type = "l")
+lines(Re(Sl[2, 2, 2, ]), col = 2)
+lines(Re(Sl[3, 3, 2, ]), col = 3)
+lines(Re(Sl[4, 4, 2, ]), col = 4)
 
 # calculate Cholesky decompositions ---------------------------------------
 
