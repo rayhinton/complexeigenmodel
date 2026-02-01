@@ -154,6 +154,8 @@ result_dir <- file.path("results",
 result_dir <- gsub("__", "_", result_dir)
 
 dir.create(result_dir, recursive = TRUE)
+dir.create(file.path(result_dir, "post-SDM-est-dist-density"), 
+           recursive = TRUE)
 
 # save the parameters file in the results directory, for later reference
 file.copy("testing/time-series-from-SDM/model-simulation-parameters.R", 
@@ -1143,38 +1145,23 @@ for (k in 1:K) {
     }
 }
 
-summary(as.vector(posterior_dists))
-summary(as.vector(multitaper_dists))
-
-k <- 1
-quantile(as.vector(posterior_dists[k, ]), 
-         probs = c(0, .025, .5, .975, 1))
-quantile(as.vector(multitaper_dists[k, ]), 
-         probs = c(0, .025, .5, .975, 1))
-
-plot(density(as.vector(posterior_dists[k, ]), from = 0), col = 1,
-     main = "densities of SDM estimate distances",
-     xlab = "Frob. distance", ylab = "density")
-lines(density(as.vector(multitaper_dists[k, ]), from = 0), col = 2)
-legend(x = "topright", legend = c("posterior", "multitaper"),
-       col = c(1, 2), lwd = 2)
-save_plot_pdf(file.path(result_dir, 
-    paste0("post-SDM-est-dist-density-k-", k, ".pdf")))
+for (k in 1:K) {
+    cat(paste0("\nk = ", k, "\n"))
+    quantile(as.vector(posterior_dists[k, ]), 
+             probs = c(0, .025, .5, .975, 1)) |> print()
+    quantile(as.vector(multitaper_dists[k, ]), 
+             probs = c(0, .025, .5, .975, 1)) |> print()
     
-k <- 2
-quantile(as.vector(posterior_dists[k, ]), 
-         probs = c(0, .025, .5, .975, 1))
-quantile(as.vector(multitaper_dists[k, ]), 
-         probs = c(0, .025, .5, .975, 1))
-
-plot(density(as.vector(posterior_dists[k, ]), from = 0), col = 1,
-     main = "densities of SDM estimate distances",
-     xlab = "Frob. distance", ylab = "density")
-lines(density(as.vector(multitaper_dists[k, ]), from = 0), col = 2)
-legend(x = "topright", legend = c("posterior", "multitaper"),
-       col = c(1, 2), lwd = 2)
-save_plot_pdf(file.path(result_dir, 
-    paste0("post-SDM-est-dist-density-k-", k, ".pdf")))
+    plot(density(as.vector(posterior_dists[k, ]), from = 0), col = 1,
+         main = paste0("densities of SDM estimate distances, k = ", k),
+         xlab = "Frob. distance", ylab = "density")
+    lines(density(as.vector(multitaper_dists[k, ]), from = 0), col = 2)
+    legend(x = "topright", legend = c("posterior", "multitaper"),
+           col = c(1, 2), lwd = 2)
+    
+    save_plot_pdf(file.path(result_dir, "post-SDM-est-dist-density",
+                            paste0("post-SDM-est-dist-density-k-", k, ".pdf")))
+}
 
 k <- 1
 l <- 75
