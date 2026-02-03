@@ -174,7 +174,6 @@ if (all_same_VAR_pars) {
     }
 }
 
-
 noiseSigma <- generate_AR1_covariance(P, sigma2 = 1, rho = 0.5)
 
 # sigmak02, scale parameter

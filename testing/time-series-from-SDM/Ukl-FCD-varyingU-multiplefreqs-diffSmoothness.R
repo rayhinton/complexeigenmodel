@@ -186,10 +186,16 @@ if (TS_par_gen_method == "truncVAR") {
 Sigmal0 <- array(NA, c(P, P, num_freqs))
 invSigmal0 <- array(NA, c(P, P, num_freqs))
 
+d_Ukl0_to_avg_Uk0 <- array(NA, c(K, num_freqs))
+
 for (l in 1:num_freqs) {
     avg_Uk0 <- apply(U_kl0[, , , l], c(1, 2), mean)
     avg_Uk0 <- avg_Uk0 %*%
         solve( EigenR::Eigen_sqrt( t(Conj(avg_Uk0)) %*% avg_Uk0 ) )
+    
+    for (k in 1:K) {
+        d_Ukl0_to_avg_Uk0[k, l] <- evec_Frob_stat(avg_Uk0, U_kl0[, , k, l])
+    }
     
     avg_Uk0_perp <- (qr(avg_Uk0, complete = TRUE) |>
                          qr.Q(complete = TRUE))[, (d+1):P]
@@ -214,6 +220,14 @@ plot(Lambdakl0[1, k, 1:num_freqs], type = "l", ylab = "lambda",
      ylim = c(0, max(Lambdakl0[, k, ])))
 lines(Lambdakl0[2, k, 1:num_freqs], col = 2)
 save_plot_pdf(file.path(result_dir, "trueLambda_2.pdf"))
+
+# check Ukl0 distances to means -------------------------------------------
+
+avg_d_Ukl0 <- colMeans(d_Ukl0_to_avg_Uk0)
+sd_d_Ukl0 <- apply(d_Ukl0_to_avg_Uk0, 2, sd)
+
+plot(avg_d_Ukl0)
+plot(sd_d_Ukl0)
 
 # calculate Cholesky decompositions ---------------------------------------
 

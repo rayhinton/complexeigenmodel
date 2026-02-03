@@ -269,3 +269,19 @@ plot(Re(SDMests[[k]][j, j, 1:(len_freq - 1)]), type = "l",
      ylab = "spectral density")
 lines(Re(Sl[j, j, k, 1:(Tt/2 - 1)]), lty = 2)
 
+# a test of distances -----------------------------------------------------
+
+for (scale_k in c(0.001, 0.01, 0.1, 1, 10)) {
+    temp <- matrix(rnorm(P^2), P, P) * scale_k
+    A_k <- (temp - t(temp)) / 2
+    Q_k <- expm::expm(A_k)
+    cat("scale_k =", scale_k, ": ||Q_k - I||_F =", norm(Q_k - diag(P), "F"), "\n")
+}
+
+# After generating Uk, check directly:
+cat("Direct Frobenius between U_1 and U_2 at freq 1:", 
+    norm(U_kl0[,,1,2] - U_kl0[,,2,2], "F"), "\n")
+
+# And check a few matrices visually
+print(U_kl0[,,1,2])
+print(U_kl0[,,2,2])
