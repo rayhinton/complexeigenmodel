@@ -1,6 +1,7 @@
 # generate time series with frequency-varying Uk 
 
 source("/home/rayhinton/Documents/PhD_research/RA_time-series/code-experiments/complexeigenmodel/functions/utility.R")
+source("functions/matrix_distances.R")
 
 library(splines)
 library(expm)
@@ -87,7 +88,33 @@ generate_smooth_Uk <- function(P, d, K, Tt, n_basis = 3, scale_base = 0.5, scale
         }
     }
     
-    return(Uk)
+    return(list(Uk = Uk, U_star = U_star))
+}
+
+generate_VAR1_coef <- function(P, max_eigenvalue = 0.9) {
+    # Generate random matrix and scale to control eigenvalues
+    A1 <- matrix(rnorm(P * P), P, P)
+    
+    # Eigen decomposition
+    eig <- eigen(A1)
+    
+    # Scale eigenvalues to be inside unit circle
+    eig$values <- eig$values / max(Mod(eig$values)) * max_eigenvalue
+    
+    # Reconstruct matrix with scaled eigenvalues
+    A1 <- Re(eig$vectors %*% diag(eig$values) %*% solve(eig$vectors))
+    
+    return(A1)
+}
+
+generate_AR1_covariance <- function(P, sigma2 = 1, rho = 0.5) {
+    # Check validity
+    if (abs(rho) >= 1) stop("rho must be in (-1, 1)")
+    
+    # Create AR(1) covariance matrix
+    Sigma <- sigma2 * rho^abs(outer(1:P, 1:P, "-"))
+    
+    return(Sigma)
 }
 
 # setup -------------------------------------------------------------------
@@ -113,7 +140,8 @@ sigmak2 <- rgamma(K, 1, 1)
 
 # generate_smooth_Uk <- function(P, d, K, Tt, n_basis = 3, scale_base = 0.5, scale_k = 0.1) {
 
-Uk <- generate_smooth_Uk(P, d, K, Tt)
+Ukall <- generate_smooth_Uk(P, d, K, Tt)
+Uk <- Ukall$Uk
 dim(Uk)
 
 # Uk <- array(NA, c(P, d, K, Tt))
@@ -129,6 +157,26 @@ dim(Uk)
 #     Uk[, , k, Tt/2] <- rMACG(P, d, diag(P))
 #     Uk[, , k, Tt] <- rMACG(P, d, diag(P))
 # }
+
+
+# investigate smoothness of U_star and Uk ---------------------------------
+
+U_star_ds <- rep(NA, dim(Ukall$U_star)[3]-1)
+Uk_ds <- matrix(NA, K, length(U_star_ds))
+
+for (i in 2:length(U_star_ds)) {
+    U_star_ds[i-1] <- frob_dist(Ukall$U_star[, , i-1], Ukall$U_star[, , i])
+    
+    for (k in 1:K) {
+        Uk_ds[k, i-1] <- frob_dist(Uk[, , k, i-1], Uk[, , k, i])
+    }
+}
+
+plot(U_star_ds, type = "l")
+plot(Uk_ds[1, ], type = "l")
+
+# look at entrywise Ustar - it should be smooth
+plot(Re(Ukall$U_star[3, 2, ]), type = "l")
 
 # generate Lambdas --------------------------------------------------------
 
@@ -177,6 +225,18 @@ plot(Re(Sl[1, 1, 2, ]), type = "l")
 lines(Re(Sl[2, 2, 2, ]), col = 2)
 lines(Re(Sl[3, 3, 2, ]), col = 3)
 lines(Re(Sl[4, 4, 2, ]), col = 4)
+
+# calculate distances between the SDMs ------------------------------------
+
+SDM_ds <- matrix(NA, K, Tt)
+
+for (t in 2:Tt) {
+    for (k in 1:K) {
+        SDM_ds[k, t-1] <- frob_dist(Sl[, , k, t-1], Sl[, , k, t])
+    }
+}
+
+plot(SDM_ds[2, 1:(Tt/2)], type = "l")
 
 # calculate Cholesky decompositions ---------------------------------------
 
@@ -285,3 +345,41 @@ cat("Direct Frobenius between U_1 and U_2 at freq 1:",
 # And check a few matrices visually
 print(U_kl0[,,1,2])
 print(U_kl0[,,2,2])
+
+
+# alternative: VAR(1) as a base path --------------------------------------
+
+par_VAR1 <- generate_VAR1_coef(P, 0.8)
+U_VAR1 <- array(NA, c(P, d, Tt))
+SDM_VAR1 <- array(NA, c(P, P, Tt))
+
+U_VAR1_ds <- rep(NA, dim(U_VAR1)[3]-1)
+Uk_VAR_ds <- matrix(NA, K, length(U_VAR1_ds))
+
+noiseSigma <- generate_AR1_covariance(P, sigma2 = 1, rho = 0.5)
+
+for (t in 1:Tt) {
+    Hz <- solve( diag(P) - exp(-1i*2*pi * t/Tt) * par_VAR1 )
+    fomega <- Hz %*% noiseSigma %*% t(Conj(Hz))
+    
+    f_evd <- eigen(fomega)
+    
+    thisU <- f_evd$vectors[, 1:d]
+    thisLambda <- f_evd$values[1:d]
+    
+    SDM_VAR1[, , t] <- thisU %*% diag(thisLambda) %*% t(Conj(thisU)) + diag(P)
+    U_VAR1[, , t] <- thisU
+    # Lambdakl0[, k, t] <- thisLambda
+}
+
+
+for (i in 2:length(U_VAR1_ds)) {
+    U_VAR1_ds[i-1] <- evec_Frob_stat(U_VAR1[, , i-1], U_VAR1[, , i])
+    
+    # for (k in 1:K) {
+        # Uk_ds[k, i-1] <- frob_dist(Uk[, , k, i-1], Uk[, , k, i])
+    # }
+}
+
+plot(U_VAR1_ds, type = "l")
+# plot(Uk_ds[1, ], type = "l")
