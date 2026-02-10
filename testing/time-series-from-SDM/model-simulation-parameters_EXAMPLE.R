@@ -32,8 +32,8 @@ gibbsPrint <- 100
 num_freqs <- Tt/2 - 1
 
 # time series generation parameters
-# possible par. gen. methods: "smoothly-similar-Ukl", "truncVAR"
-TS_par_gen_method <- "smoothly-similar-Ukl"
+# possible par. gen. methods: "smoothly-similar-Ukl", "truncVAR", "baseVAR"
+TS_par_gen_method <- "baseVAR"
 # number of knots in the function that generates Lambda curves
 n_knots <- 4
 U_k_n_basis <- 3
