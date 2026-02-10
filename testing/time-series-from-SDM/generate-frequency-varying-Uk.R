@@ -32,7 +32,9 @@ generate_smooth_positive_function <- function(N = 100, n_knots = 7,
 
 library(expm)
 
-generate_smooth_Uk <- function(P, d, K, Tt, n_basis = 3, scale_base = 0.5, scale_k = 0.1) {
+generate_smooth_Uk <- 
+    function(P, d, K, Tt, U_star_method, 
+             n_basis = 3, scale_base = 0.5, scale_k = 0.1) {
     
     Uk <- array(NA_complex_, c(P, d, K, Tt))
     
@@ -57,14 +59,30 @@ generate_smooth_Uk <- function(P, d, K, Tt, n_basis = 3, scale_base = 0.5, scale
     # Compute base path U*(ω)
     U_star <- array(NA_complex_, c(P, d, n_freq))
     
-    for (idx in 1:n_freq) {
-        om <- omega[idx]
-        A <- matrix(0 + 0i, P, P)
-        for (j in 1:n_basis) {
-            A <- A + cos(j * om) * C_R[,,j]
-            A <- A + 1i * sin(j * om) * C_S[,,j]  # vanishes at 0 and π
+    if (U_star_method == "frombasis") {
+        # Case 1: generate a smooth base path of U
+        for (idx in 1:n_freq) {
+            om <- omega[idx]
+            A <- matrix(0 + 0i, P, P)
+            for (j in 1:n_basis) {
+                A <- A + cos(j * om) * C_R[,,j]
+                A <- A + 1i * sin(j * om) * C_S[,,j]  # vanishes at 0 and π
+            }
+            U_star[,,idx] <- expm(A) %*% U_0
         }
-        U_star[,,idx] <- expm(A) %*% U_0
+    } else if (U_star_method == "VAR1") {
+        # Case 2: use the U from a VAR(1) model
+        VARpars <- generate_VAR1_coef(P, 0.8)
+        noiseSigma <- generate_AR1_covariance(P, sigma2 = 1, rho = 0.5)
+        
+        for (idx in 1:n_freq) {
+            om <- omega[idx]
+            Hz <- solve( diag(P) - exp(-1i*om) * VARpars)
+            fomega <- Hz %*% noiseSigma %*% t(Conj(Hz))
+            f_evd <- eigen(fomega)
+            
+            U_star[, , idx] <- f_evd$vectors[, 1:d]
+        }
     }
     
     # Series-specific rotations (real skew-symmetric preserves real-ness at boundaries)
@@ -117,12 +135,56 @@ generate_AR1_covariance <- function(P, sigma2 = 1, rho = 0.5) {
     return(Sigma)
 }
 
+plot_sdm_smoothness <- function(sdm_array, n_diffs = 3, freq = NULL) {
+    # sdm_array: P x P x T array of matrices evaluated at T frequencies
+    # n_diffs:   number of finite difference orders to compute and plot
+    # freq:      optional frequency grid (length T); defaults to equally spaced on [0, pi]
+    
+    T_len <- dim(sdm_array)[3]
+    if (is.null(freq)) freq <- seq(0, pi, length.out = T_len)
+    
+    # Compute Frobenius norm at each frequency
+    frob <- apply(sdm_array, 3, function(mat) norm(mat, type = "F"))
+    
+    diffs <- list(frob)
+    f_grids <- list(freq)
+    
+    for (d in seq_len(n_diffs)) {
+        prev <- diffs[[d]]
+        h <- diff(f_grids[[d]])
+        diffs[[d + 1]] <- diff(prev) / h
+        f_grids[[d + 1]] <- f_grids[[d]][-1]
+    }
+    
+    old.par <- par(no.readonly = TRUE)
+    
+    n_plots <- n_diffs + 1
+    if (n_plots <= 4) {
+        par(mfrow = c(n_plots, 1), mar = c(3, 4, 2, 1), oma = c(2, 0, 2, 0))
+    } else {
+        n_rows <- ceiling(n_plots / 2)
+        par(mfrow = c(n_rows, 2), mar = c(3, 4, 2, 1), oma = c(2, 0, 2, 0))
+    }
+    
+    for (d in seq_len(n_plots)) {
+        label <- if (d == 1) "||f(ω)||_F" else paste0("Δ^", d - 1, " ||f||_F")
+        plot(f_grids[[d]], diffs[[d]], type = "l",
+             xlab = "", ylab = label,
+             main = if (d == 1) "Frobenius norm of SDM" else "")
+    }
+    mtext("Frequency", side = 1, outer = TRUE)
+    
+    par(old.par)
+}
+
 # setup -------------------------------------------------------------------
 
 Tt <- 1024
 P <- 4
 d <- 2
 K <- 2
+
+scale_k <- 0.1
 
 len_freq <- Tt/2
 LL <- round(sqrt(Tt))
@@ -140,7 +202,7 @@ sigmak2 <- rgamma(K, 1, 1)
 
 # generate_smooth_Uk <- function(P, d, K, Tt, n_basis = 3, scale_base = 0.5, scale_k = 0.1) {
 
-Ukall <- generate_smooth_Uk(P, d, K, Tt)
+Ukall <- generate_smooth_Uk(P, d, K, Tt, U_star_method = "VAR1")
 Uk <- Ukall$Uk
 dim(Uk)
 
@@ -349,12 +411,24 @@ print(U_kl0[,,2,2])
 
 # alternative: VAR(1) as a base path --------------------------------------
 
+temp <- matrix(rnorm(P^2), P, P) * scale_k
+A_k <- (temp - t(temp)) / 2
+Q_k <- expm(A_k)
+
 par_VAR1 <- generate_VAR1_coef(P, 0.8)
 U_VAR1 <- array(NA, c(P, d, Tt))
-SDM_VAR1 <- array(NA, c(P, P, Tt))
+Uk_mats <- array(NA, c(P, d, Tt))
+trunc_SDM_VAR1 <- array(NA, c(P, P, Tt))
+Sk_mats <- array(NA, c(P, P, Tt))
+orig_SDM_VAR1 <- array(NA, c(P, P, Tt))
+
+true_evals <- matrix(NA, P, Tt)
 
 U_VAR1_ds <- rep(NA, dim(U_VAR1)[3]-1)
 Uk_VAR_ds <- matrix(NA, K, length(U_VAR1_ds))
+trunc_VAR1_ds <- rep(NA, dim(U_VAR1)[3]-1)
+orig_VAR1_ds <- rep(NA, dim(U_VAR1)[3]-1)
+Sk_ds <- rep(NA, dim(U_VAR1)[3]-1)
 
 noiseSigma <- generate_AR1_covariance(P, sigma2 = 1, rho = 0.5)
 
@@ -367,14 +441,27 @@ for (t in 1:Tt) {
     thisU <- f_evd$vectors[, 1:d]
     thisLambda <- f_evd$values[1:d]
     
-    SDM_VAR1[, , t] <- thisU %*% diag(thisLambda) %*% t(Conj(thisU)) + diag(P)
+    Uk <- Q_k %*% thisU
+    Uk_mats[, , t] <- Uk
+    
+    trunc_SDM_VAR1[, , t] <- thisU %*% diag(thisLambda) %*% t(Conj(thisU)) + 
+        diag(P)
     U_VAR1[, , t] <- thisU
+    orig_SDM_VAR1[, , t] <- fomega
+    
+    Sk_mats[, , t] <- Uk %*% diag(thisLambda) %*% t(Conj(Uk)) + diag(P)
+    
+    true_evals[, t] <- f_evd$values
     # Lambdakl0[, k, t] <- thisLambda
 }
 
 
 for (i in 2:length(U_VAR1_ds)) {
     U_VAR1_ds[i-1] <- evec_Frob_stat(U_VAR1[, , i-1], U_VAR1[, , i])
+    orig_VAR1_ds[i-1] <- frob_dist(orig_SDM_VAR1[, , i-1], orig_SDM_VAR1[, , i])
+    
+    trunc_VAR1_ds[i-1] <- frob_dist(trunc_SDM_VAR1[, , i-1], 
+                                    trunc_SDM_VAR1[, , i])
     
     # for (k in 1:K) {
         # Uk_ds[k, i-1] <- frob_dist(Uk[, , k, i-1], Uk[, , k, i])
@@ -383,3 +470,25 @@ for (i in 2:length(U_VAR1_ds)) {
 
 plot(U_VAR1_ds, type = "l")
 # plot(Uk_ds[1, ], type = "l")
+
+plot(orig_VAR1_ds, type = "l")
+plot(trunc_VAR1_ds, type = "l")
+
+plot(true_evals[1, ], type = "l", ylim = c(0, max(true_evals)))
+lines(true_evals[2, ], col = 2)
+lines(true_evals[3, ], col = 3)
+lines(true_evals[4, ], col = 4)
+
+plot(true_evals[3, ], type = "l")
+
+plot(Im(orig_SDM_VAR1[1, 2, ]), type = "l")
+
+plot_sdm_smoothness(orig_SDM_VAR1, n_diffs = 7)
+plot_sdm_smoothness(trunc_SDM_VAR1, n_diffs = 7)
+
+plot_sdm_smoothness(Sk_mats, n_diffs = 7)
+
+# from the MCMC sampler script
+plot_sdm_smoothness(fkTR[, , 1, 1:(Tt/2-1)], n_diffs = 7)
+
+plot_sdm_smoothness(Sl[, , 1, 1:(Tt/2-1)], n_diffs = 7)

@@ -179,6 +179,8 @@ if (TS_par_gen_method == "truncVAR") {
     source("testing/time-series-from-SDM/sim-setup-generate-truncVAR-pars.R")
 } else if (TS_par_gen_method == "smoothly-similar-Ukl") { 
     source("testing/time-series-from-SDM/sim-setup-generate-smoothly-similar-Ukl-pars.R")
+} else if (TS_par_gen_method == "baseVAR") {
+    source("testing/time-series-from-SDM/sim-setup-generate-baseVAR-pars.R")
 }
 
 # calculate a reasonable Sigmal0 parameter
@@ -226,8 +228,13 @@ save_plot_pdf(file.path(result_dir, "trueLambda_2.pdf"))
 avg_d_Ukl0 <- colMeans(d_Ukl0_to_avg_Uk0)
 sd_d_Ukl0 <- apply(d_Ukl0_to_avg_Uk0, 2, sd)
 
-plot(avg_d_Ukl0)
-plot(sd_d_Ukl0)
+plot(avg_d_Ukl0, type = "l", 
+     main = "avg. of axis Frobenius distance of Ukl0 to avg. Ukl0")
+save_plot_pdf(file.path(result_dir, "Ukl0-avg-dist-to-avg.pdf"))
+
+plot(sd_d_Ukl0, type = "l", 
+     main = "st. dev. of axis Frobenius distance of Ukl0 to avg. Ukl0")
+save_plot_pdf(file.path(result_dir, "Ukl0-SD-dist-to-avg.pdf"))
 
 # calculate Cholesky decompositions ---------------------------------------
 
