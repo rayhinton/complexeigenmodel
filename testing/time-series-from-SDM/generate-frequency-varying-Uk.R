@@ -140,23 +140,36 @@ plot_sdm_smoothness <- function(sdm_array, n_diffs = 3, freq = NULL) {
     # n_diffs:   number of finite difference orders to compute and plot
     # freq:      optional frequency grid (length T); defaults to equally spaced on [0, pi]
     
+    P <- dim(sdm_array)[1]
     T_len <- dim(sdm_array)[3]
     if (is.null(freq)) freq <- seq(0, pi, length.out = T_len)
     
-    # Compute Frobenius norm at each frequency
+    # Compute Frobenius norm at each frequency (for zeroth order plot)
     frob <- apply(sdm_array, 3, function(mat) norm(mat, type = "F"))
     
-    diffs <- list(frob)
+    # Store matrix arrays and scalar summaries separately
+    mat_diffs <- list(sdm_array)
+    scalar_diffs <- list(frob)
     f_grids <- list(freq)
     
+    old.par <- par(no.readonly = TRUE)
+    
     for (d in seq_len(n_diffs)) {
-        prev <- diffs[[d]]
+        prev_mats <- mat_diffs[[d]]
         h <- diff(f_grids[[d]])
-        diffs[[d + 1]] <- diff(prev) / h
+        T_d <- dim(prev_mats)[3]
+        
+        # Difference the matrices first
+        new_mats <- array(0, dim = c(P, P, T_d - 1))
+        for (t in seq_len(T_d - 1)) {
+            new_mats[, , t] <- (prev_mats[, , t + 1] - prev_mats[, , t]) / h[t]
+        }
+        
+        # Then take Frobenius norm
+        mat_diffs[[d + 1]] <- new_mats
+        scalar_diffs[[d + 1]] <- apply(new_mats, 3, function(mat) norm(mat, type = "F"))
         f_grids[[d + 1]] <- f_grids[[d]][-1]
     }
-    
-    old.par <- par(no.readonly = TRUE)
     
     n_plots <- n_diffs + 1
     if (n_plots <= 4) {
@@ -167,8 +180,8 @@ plot_sdm_smoothness <- function(sdm_array, n_diffs = 3, freq = NULL) {
     }
     
     for (d in seq_len(n_plots)) {
-        label <- if (d == 1) "||f(ω)||_F" else paste0("Δ^", d - 1, " ||f||_F")
-        plot(f_grids[[d]], diffs[[d]], type = "l",
+        label <- if (d == 1) "||f(ω)||_F" else paste0("||Δ^", d - 1, " f||_F")
+        plot(f_grids[[d]], scalar_diffs[[d]], type = "l",
              xlab = "", ylab = label,
              main = if (d == 1) "Frobenius norm of SDM" else "")
     }
@@ -492,3 +505,7 @@ plot_sdm_smoothness(Sk_mats, n_diffs = 7)
 plot_sdm_smoothness(fkTR[, , 1, 1:(Tt/2-1)], n_diffs = 7)
 
 plot_sdm_smoothness(Sl[, , 1, 1:(Tt/2-1)], n_diffs = 7)
+
+# from simulated Ukl0 -----------------------------------------------------
+
+plot_sdm_smoothness(fkTR[, , 5, 1:num_freqs], n_diffs = 1)
