@@ -423,7 +423,7 @@ U_kls <- U_kls_all[, , , , 1]
 # library(foreach)
 # library(doParallel)
 # 
-# n_cores <- 12
+# n_cores <- 2
 # cluster <- makeCluster(n_cores)
 # registerDoParallel(cluster)
 

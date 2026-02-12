@@ -327,19 +327,19 @@ for (k in 1:K) {
 # calculate true SDMs as data
 data_list_w <- list()
 
-for (w in 1:num_freqs){
+for (l in 1:num_freqs){
     data_list <- list()
     
     for (k in 1:K) {
         if (use_true_SDMs) {
             # use the true SDM
-            data_list[[k]] <- LL * fkTR[, , k, w]
+            data_list[[k]] <- LL * fkTR[, , k, l]
         } else {
-            data_list[[k]] <- LL * SDMests[[k]][, , w]
+            data_list[[k]] <- LL * SDMests[[k]][, , l]
         }
     }
     
-    data_list_w[[w]] <- data_list
+    data_list_w[[l]] <- data_list
 }
 
 # compare SDM ests and true SDMs ------------------------------------------
@@ -415,17 +415,18 @@ accCount_s[, , 1] <- TRUE
 accCount_Sigma_s <- array(NA, c(num_freqs, gibbsIts))
 accCount_Sigma_s[, 1] <- TRUE
 
-# a temporary matrices with the previous samples
+# temporary matrices with the first samples
 U_kls <- U_kls_all[, , , , 1]
+result_Lambdas <- Lambdak_w_s[, , , 1]
 
 # parallel ----------------------------------------------------------------
 
-# library(foreach)
-# library(doParallel)
-# 
-# n_cores <- 12
-# cluster <- makeCluster(n_cores)
-# registerDoParallel(cluster)
+library(foreach)
+library(doParallel)
+
+n_cores <- 2
+cluster <- makeCluster(n_cores)
+registerDoParallel(cluster)
 
 # sampling ----------------------------------------------------------------
 {
@@ -433,16 +434,25 @@ U_kls <- U_kls_all[, , , , 1]
     for (s in 2:gibbsIts) {
         if (s %% gibbsPrint == 0) cat(paste0(s, ": ", Sys.time(), "\n"))
         
-        # a temporary matrices with the previous samples
-        # U_kls <- U_kls_all[, , , , s-1]
-        result_Lambdas <- Lambdak_w_s[, , , s-1]
+        # before sampling
+        accCount <- array(TRUE, c(K, num_freqs))
         
-        ##### Lambda sampling
-        
-        # section for frequency l = 1
-        for (k in 1:K) {
+        ##### Parallel sampling
+        ksamples <- foreach(k = 1:K) %dopar% {
+        # for (k in 1:K) {       
+            thisLambda <- array(NA, c(d, num_freqs))
+            thisUkl <- U_kls[, , k, ]
+            thisAccCount <- rep(TRUE, num_freqs)
+            
+            thisTaujkl2 <- taujkl2_s[, k, , s-1]
+            thisZetajk2 <- zetajk2_s[, k, s-1]
+
+            ##### Lambda sampling
+            
+            ### Lambda: 1st frequency
             LSkw <- data_list_w[[1]][[k]]
-            Ukl <- U_kls[, , k, 1]
+            # Ukl <- U_kls[, , k, 1]
+            Ukl <- thisUkl[, , 1]
             
             # for each Lambdak value, j
             for (j in sample(d)) {
@@ -458,7 +468,7 @@ U_kls <- U_kls_all[, , , , 1]
                 # lower and upper bounds for truncating the Gamma distribution
                 if (j == 1) lb <- 0 else lb <- 1 / (result_Lambdas[j-1, k, 1] + 1)
                 if (j == d) ub <- 1 else ub <- 1 / (result_Lambdas[j+1, k, 1] + 1)
-                                
+                
                 # by slice sampling, instead
                 xi_jk <- uni.slice(1/(1 + result_Lambdas[j, k, 1]),
                                    dgamma,
@@ -467,57 +477,54 @@ U_kls <- U_kls_all[, , , , 1]
                                    log = TRUE)
                 
                 # convert xi to Lambda
-                result_Lambdas[j, k, 1] <- 1/xi_jk - 1
-            }
-        }
-        
-        if (Lambda_prior %in% c("1RW", "2RWPN")) {
+                # result_Lambdas[j, k, 1] <- 1/xi_jk - 1
+                thisLambda[j, 1] <- 1/xi_jk - 1
+            } # end of l = 1 Lambda sampling
             
-            for ( w in sample(2:(num_freqs-1)) ) {
-                for (k in 1:K) {
-                    Ukw <- U_kls[, , k, w]
-                    Dkw1 <- data_list_w[[w]][[k]]
+            ### Lambda: frequencies in 2 to num_freqs-1
+            if (Lambda_prior %in% c("1RW", "2RWPN")) {
+                for ( l in sample(2:(num_freqs-1)) ) {
+                    Ukw <- U_kls[, , k, l]
+                    Dkw1 <- data_list_w[[l]][[k]]
                     
                     for (j in sample(d)) {
                         ajk <- t(Conj(Ukw[, j])) %*% Dkw1 %*% Ukw[, j] / 
-                            # sigmakl2_s[k, w, s-1]
+                            # sigmakl2_s[k, l, s-1]
                             sigmak2_s[k, s-1]
                         # should be strictly real
                         ajk <- Re(ajk)
                         
                         if (Lambda_prior == "2RWPN") {
                             # 2nd order RW, previous and next neighbors
-                            lp <- result_Lambdas[j, k, w-1]
-                            ln <- result_Lambdas[j, k, w+1]
+                            lp <- result_Lambdas[j, k, l-1]
+                            ln <- result_Lambdas[j, k, l+1]
                             mu <- (lp + ln)/2
                         }
                         
                         else if (Lambda_prior == "1RW") {
-                        # 1st order RW
-                            mu <- result_Lambdas[j, k, w-1]
+                            # 1st order RW
+                            mu <- result_Lambdas[j, k, l-1]
                         }
                         
                         # for single smoothing parameter
-                        # varpar_jkl <- taujk2_s[j, k, s-1]
-                        varpar_jkl <- taujkl2_s[j, k, w-1, s-1]
+                        varpar_jkl <- taujkl2_s[j, k, l-1, s-1]
                         
                         # by slice sampling, instead
-                        newdraw <- uni.slice(result_Lambdas[j, k, w], unnorm_logPDF,
-                                             w = 1, m = Inf, lower = 0, upper = Inf, 
-                                             #tau2 = taujk2_s[j, k, s-1], 
+                        newdraw <- uni.slice(result_Lambdas[j, k, l],
+                                             unnorm_logPDF,
+                                             w = 1, m = Inf, lower = 0, 
+                                             upper = Inf, 
                                              tau2 = varpar_jkl,
                                              ajk = ajk, mu = mu, N = LL, 
                                              logscale = TRUE)    
-                        result_Lambdas[j, k, w] <- newdraw
+                        # result_Lambdas[j, k, l] <- newdraw
+                        thisLambda[j, l] <- newdraw
                         
                     } # end of sampling j in 1:d
-                } # end of sampling k in 1:K
-            } # end of sampling over frequencies
-        }
-        
-        ##### for the last frequency, l = num_freq
-        # 1st order RW
-        for (k in 1:K) {
+                } # end of sampling over frequencies
+            } # end of the conditional to check the type of prior for Lambda
+            
+            ### Lambda: last frequency
             Uw1 <- U_kls[, , k, num_freqs]
             Dkw1 <- data_list_w[[num_freqs]][[k]]
             
@@ -533,67 +540,57 @@ U_kls <- U_kls_all[, , , , 1]
                 mu <- result_Lambdas[j, k, num_freqs - 1]
                 
                 # by slice sampling, instead
-                newdraw <- uni.slice(result_Lambdas[j, k, num_freqs], unnorm_logPDF,
+                newdraw <- uni.slice(result_Lambdas[j, k, num_freqs], 
+                                     unnorm_logPDF,
                                      w = 1, m = Inf, lower = 0, upper = Inf, 
-                                     # TODO change to a variable, not fixed value
                                      tau2 = zetajk2_s[j, k, s-1], 
                                      ajk = ajk, mu = mu, N = LL, 
                                      logscale = TRUE)    
-                result_Lambdas[j, k, num_freqs] <- newdraw
+                # result_Lambdas[j, k, num_freqs] <- newdraw
+                thisLambda[j, num_freqs] <- newdraw
                 
             } # end of sampling j in 1:d
-        } # end of sampling k in 1:K
-        
-        # save the sampled Lambdas    
-        Lambdak_w_s[, , , s] <- result_Lambdas
-        
-        # sample the separate taujk2 and zetajk2 parameters
-        for (j in 1:d) {
-            for (k in 1:K) {
+            
+            ##### end of Lambda sampling
+            
+            ##### taujkl2 and zetajk2 sampling
+            
+            # sample the separate taujk2 and zetajk2 parameters
+            for (j in 1:d) {
+                # for (k in 1:K) {
                 
                 if (Lambda_prior == "2RWPN") {
                     # 2nd order RW, next and previous neighbors
                     ### BEGIN STANDARD SAMPLING
                     sumalljk <- (
-                        (result_Lambdas[j, k, 2:(num_freqs-1)] -
-                             .5*result_Lambdas[j, k, 1:(num_freqs-2)] -
-                             .5*result_Lambdas[j, k, 3:(num_freqs)])^2)
-    
-                    #taujk2_s[j, k, s] <- 1/rgamma(1, tau2_a + .5,
-                    #                              rate = tau2_b + .5*sumalljk)
-                    taujkl2_s[j, k, , s] <- 
+                        (thisLambda[j, 2:(num_freqs-1)] -
+                             .5*thisLambda[j, 1:(num_freqs-2)] -
+                             .5*thisLambda[j, 3:(num_freqs)])^2)
+                    
+                    thisTaujkl2[j, ] <-
                         1/rgamma(length(sumalljk), 
                                  tau2_a + .5,
                                  rate = tau2_b + .5*sumalljk)
                     ### END STANDARD SAMPLING
+                } else {
+                    stop(paste0("No sampler implemented for taujkl when Lambda_prior is ", Lambda_prior))
                 }
                 
                 # zetajk2 sampling
                 # based on 1st order random walk for the last Lambda
-                sum_zeta <- (result_Lambdas[j, k, num_freqs] - 
-                                 result_Lambdas[j, k, num_freqs-1])^2
-                zetajk2_s[j, k, s] <- 1/rgamma(1, tau2_a + .5,
+                sum_zeta <- (thisLambda[j, num_freqs] - 
+                                 thisLambda[j, num_freqs-1])^2
+                thisZetajk2[j] <- 1/rgamma(1, tau2_a + .5,
                                                rate = tau2_b + .5*sum_zeta)
+                # }
             }
-        }
-        
-        ##### Uk sampling 
-        
-        # before sampling
-        accCount <- array(TRUE, c(K, num_freqs))
-        # newU_kls <- array(NA, c(P, d, K, num_freqs))
-        
-        if (sample_true_Ukl0) {
-            U_kls <- U_kl0[, , , 1:num_freqs]
-        } else {
-        
-        # during sample, 1:K, 1:num_freqs
-        
-        # result_list_Uk <- foreach(k = 1:K) %dopar% {
-        for (k in 1:K) {
             
-            # newU_k <- array(NA, c(P, d, num_freqs))
-            # accCount_k <- rep(TRUE, num_freqs)
+            ##### Ukl sampling    
+                        
+            if (sample_true_Ukl0) {
+                # U_kls <- U_kl0[, , , 1:num_freqs]
+                thisUkl <- U_kl0[, , k, 1:num_freqs]
+            } else {
             
             # calculate traces and other terms, for the MH acceptance ratio
             for (l in 1:num_freqs) {
@@ -603,14 +600,16 @@ U_kls <- U_kls_all[, , , , 1]
                 # invSigmas <- invSigmal0[, , l]
                 invSigmas <- result_invSigmals[, , l]
                 
-                Us <- U_kls[, , k, l]
+                # Us <- U_kls[, , k, l]
+                Us <- thisUkl[, , l]
                 
                 ### MH sampling
                 # propose U by small rotation of Us
                 Up <- Uk_MH_Cayley(Us, tau_Ukl[k, l], doCayleyZeros, CayleyZeroProb)
                 # let Skl be the scaled data matrix (i.e. SDM est. at freq. index l)
                 Skl <- data_list_w[[l]][[k]]
-                lambdakl <- result_Lambdas[, k, l]
+                # lambdakl <- result_Lambdas[, k, l]
+                lambdakl <- thisLambda[, l]
                 Omegakl <- diag(lambdakl / (1 + lambdakl))
                 
                 # tracep <- Re(sum(diag( Up %*% Omegakl %*% t(Conj(Up)) %*% Skl )))
@@ -629,31 +628,39 @@ U_kls <- U_kls_all[, , , , 1]
                 
                 # accept or reject
                 if (log(runif(1)) <= logr) {
-                    U_kls[, , k, l] <- Up
-                    # newU_k[, , l] <- Up
+                    # U_kls[, , k, l] <- Up
+                    thisUkl[, , l] <- Up
                 } else {
-                    U_kls[, , k, l] <- Us
-                    accCount[k, l] <- FALSE
-                    # newU_k[, , l] <- Us
-                    # accCount_k <- FALSE
+                    # U_kls[, , k, l] <- Us
+                    # accCount[k, l] <- FALSE
+                    thisUkl[, , l] <- Us
+                    thisAccCount[l] <- FALSE
                 }
                                 
-            } # end of summing over frequencies
+            } # end of sampling over frequencies
+            
+            } # end of conditional to sample random or true values
             
             # return this value for the dopar for loop
-            # list(U = newU_k, acc = accCount_k)
+            list(Lambdakl = thisLambda, 
+                 taujkl2 = thisTaujkl2, zetajk2 = thisZetajk2,
+                 Ukl = thisUkl, accCount = thisAccCount)
         } # end of sampling over 1:K
         
-        # save sampled values from the dopar list
-        # for (k in 1:K) {
-        #     U_kls_all[, , k, , s] <- result_list_Uk[[k]]$U
-        #     accCount_s[k, , s] <- result_list_Uk[[k]]$acc
-        # }
-        
-        } # end of conditional to randomly sample Ukl
+        # save sampled values from the dopar list into iteration-level arrays
+        for (k in 1:K) {
+            U_kls[, , k, ] <- ksamples[[k]]$Ukl
+            accCount[k, ] <- ksamples[[k]]$accCount
+            result_Lambdas[, k, ] <- ksamples[[k]]$Lambdakl
             
+            taujkl2_s[, k, , s] <- ksamples[[k]]$taujkl2
+            zetajk2_s[, k, s] <- ksamples[[k]]$zetajk2
+        }
+            
+        # save this iteration into sampler-level arrays
         U_kls_all[, , , , s] <- U_kls
         accCount_s[, , s] <- accCount
+        Lambdak_w_s[, , , s] <- result_Lambdas
         
         #####
         # Sigmal sampling
