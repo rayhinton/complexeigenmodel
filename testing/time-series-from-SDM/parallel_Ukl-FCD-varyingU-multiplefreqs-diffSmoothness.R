@@ -458,11 +458,7 @@ U_kls <- U_kls_all[, , , , 1]
                 # lower and upper bounds for truncating the Gamma distribution
                 if (j == 1) lb <- 0 else lb <- 1 / (result_Lambdas[j-1, k, 1] + 1)
                 if (j == d) ub <- 1 else ub <- 1 / (result_Lambdas[j+1, k, 1] + 1)
-                
-                # distr <- Runuran::udgamma(shape = LL+1, scale = 1/tjk, lb, ub)
-                # gen <- Runuran::arsd.new(distr)
-                # xi_jk <- Runuran::ur(gen, 1)
-                
+                                
                 # by slice sampling, instead
                 xi_jk <- uni.slice(1/(1 + result_Lambdas[j, k, 1]),
                                    dgamma,
@@ -496,23 +492,10 @@ U_kls <- U_kls_all[, , , , 1]
                             mu <- (lp + ln)/2
                         }
                         
-                        # SPECIAL for different smoothing parameters
-                        # if (w < 300) {
-                        #     varpar_jkl <- taujk2_s[j, k, s-1]
-                        # } else {
-                        #     varpar_jkl <- taujk2B_s[j, k, s-1]
-                        # }
-                        
-                        # 2nd order RW, previous two
-                        # lm1 <- result_Lambdas[j, k, w-1]
-                        # lm2 <- result_Lambdas[j, k, w-2]
-                        # mu <- 2*lm1 - lm2
-                        
                         else if (Lambda_prior == "1RW") {
                         # 1st order RW
                             mu <- result_Lambdas[j, k, w-1]
                         }
-                        
                         
                         # for single smoothing parameter
                         # varpar_jkl <- taujk2_s[j, k, s-1]
@@ -585,45 +568,6 @@ U_kls <- U_kls_all[, , , , 1]
                     ### END STANDARD SAMPLING
                 }
                 
-                # 2nd order RW, next and previous; DIFFERENT FREQUENCIES
-                # sumalljk <- sum(
-                #     (result_Lambdas[j, k, 2:(299)] -
-                #          .5*result_Lambdas[j, k, 1:(299-1)] -
-                #          .5*result_Lambdas[j, k, 3:(300)])^2)
-                # 
-                # sumalljkB <- sum(
-                #     (result_Lambdas[j, k, 300:(num_freqs-1)] -
-                #          .5*result_Lambdas[j, k, 299:(num_freqs-2)] -
-                #          .5*result_Lambdas[j, k, 301:(num_freqs)])^2)
-                # 
-                # # this is for portion A
-                # taujk2_s[j, k, s] <- 1/rgamma(1, tau2_a + .5*(298),
-                #                               rate = tau2_b + .5*sumalljk)
-                # # taujk2_s[j, k, s] <- 10000
-                # 
-                # # this is for portion B
-                # taujk2B_s[j, k, s] <- 1/rgamma(1, tau2_a + .5*(num_freqs - 300),
-                #                               rate = tau2_b + .5*sumalljkB)
-                ### END different frequencies
-                
-                # 2nd order RW, previous two
-                # sumalljk <- sum(
-                #     (result_Lambdas[j, k, 3:num_freqs] -
-                #          result_Lambdas[j, k, 2:(num_freqs-1)] +
-                #          .5*result_Lambdas[j, k, 1:(num_freqs-2)])^2)
-                # 
-                # taujk2_s[j, k, s] <- 1/rgamma(1, tau2_a + .5*(num_freqs-2),
-                #                               rate = tau2_b + .5*sumalljk)
-                
-                #else if (Lambda_prior == "1RW") {
-                #    # 1st order RW
-                #    sumalljk <- sum(
-                #        (result_Lambdas[j, k, 2:(num_freqs-1)] -
-                #            result_Lambdas[j, k, 1:(num_freqs-2)])^2)
-                #    taujk2_s[j, k, s] <- 1/rgamma(1, tau2_a + .5*(num_freqs-2),
-                #                                rate = tau2_b + .5*sumalljk)
-                #}
-                
                 # zetajk2 sampling
                 # based on 1st order random walk for the last Lambda
                 sum_zeta <- (result_Lambdas[j, k, num_freqs] - 
@@ -693,14 +637,7 @@ U_kls <- U_kls_all[, , , , 1]
                     # newU_k[, , l] <- Us
                     # accCount_k <- FALSE
                 }
-                
-                ### Geodesic slice sampling
-                # U_kls[, , k, l] <-
-                #     geoSS(Us, logd_Uk, w = w, m = m,
-                #           invSigmas = invSigmas, lw = l, sigma_k2 = sigma_k2,
-                #           result_Lambdas = result_Lambdas,
-                #           data_list_w = data_list_w, num_freqs = num_freqs, k = k)
-                
+                                
             } # end of summing over frequencies
             
             # return this value for the dopar for loop
@@ -762,19 +699,7 @@ U_kls <- U_kls_all[, , , , 1]
                     logdet(t(Conj(U_kls[, , k, l])) %*% invSigmals %*% 
                                U_kls[, , k, l])
             }
-            
-#            logdens_num <- -d*K* logdet(Sigmap) - P * sumlog_p - 
-#                n_Sig[l] * logdet(Sigmap) +
-#                (n_Sig[l] - P) * logdet(Sigmals) - 
-#                # P*n_Sig[l] * log( Re(sum(diag( invSigmap %*% Sigmals))) ) 
-#                P*n_Sig[l] * log( Re(sum(t(invSigmap) * Sigmals)) )
-#
-#            logdens_den <- -d*K* logdet(Sigmals) - P * sumlog_s - 
-#                n_Sig[l] * logdet(Sigmals) +
-#                (n_Sig[l] - P) * logdet(Sigmap) - 
-#                # P*n_Sig[l] * log( Re(sum(diag( invSigmals %*% Sigmap ))) ) 
-#                P*n_Sig[l] * log( Re(sum(t(invSigmals) * Sigmap )) )
-                
+                            
             logdens_num <- -d*K* logdet(Sigmap) - P * sumlog_p - 
                 n_Sig[l] * logdet(prop_par_p) + # Sigmap is the parameter
                 (n_Sig[l] - P) * logdet(Sigmals) - 
@@ -793,32 +718,14 @@ U_kls <- U_kls_all[, , , , 1]
                 result_Sigmals[, , l] <- Sigmap
                 result_invSigmals[, , l] <- invSigmap
 
-                # Sigmals <- Sigmap
-                # invSigmals <- invSigmap
-                # acc_this_Sigma <- TRUE
             } else {
                 # TODO this is technically redundant, I think
                 result_Sigmals[, , l] <- Sigmals
                 result_invSigmals[, , l] <- invSigmals
                 accCount_Sigma[l] <- FALSE
 
-                # acc_this_Sigma <- FALSE
             }
-            
-            # list(Sigmals, invSigmals, acc_this_Sigma)
-            # list(Sigmal = Sigmals, invSigmal = invSigmals, acc = acc_this_Sigma)
         } # end of frequencies for Sigmal sampling
-        
-        # for (l in 1:num_freqs) {
-        #     result_Sigmals[, , l] <- this_Sigma_result[[l]][[1]]
-        #     result_invSigmals[, , l] <- this_Sigma_result[[l]][[2]]
-        #     accCount_Sigma[l] <- this_Sigma_result[[l]][[3]]
-        # }
-        
-        # Vectorized extraction (faster than for loop)
-        # result_Sigmals <- simplify2array(lapply(this_Sigma_result, `[[`, "Sigmal"))
-        # result_invSigmals <- simplify2array(lapply(this_Sigma_result, `[[`, "invSigmal"))
-        # accCount_Sigma <- vapply(this_Sigma_result, `[[`, logical(1), "acc")
         
         Sigmal_s[, , , s] <- result_Sigmals
         accCount_Sigma_s[, s] <- accCount_Sigma
@@ -832,29 +739,14 @@ U_kls <- U_kls_all[, , , , 1]
             par2 <- 0
             
             for (l in 1:num_freqs) {
-                # TODO rest of the calculations
-                # zetajk2_s[j, k, s] <- 1/rgamma(1, tau2_a + .5,
-                #                                rate = tau2_b + .5*sum_zeta)
-                
-                # Re(sum(t(invSigmap) * Sigmals))
-                
                 LSkw <- data_list_w[[l]][[k]]
                 Ukl <- U_kls[, , k, l]
                 Lambdakl <- diag(result_Lambdas[, k, l])
                 
                 mat1 <- diag(P) - Ukl %*% 
-                    diag(1/(1/result_Lambdas[, k, l] + 1)) %*% t(Conj(Ukl))
-                # par2 <- 
-                # t(solve(U_kls[, , k, l] %*% diag(result_Lambdas[, k, l]) %*% 
-                    # t(Conj(U_kls[, , k, l])) + diag(P))) * data
-                # par2 <- Re(sum(
-                    # solve(Ukl %*% Lambdakl %*% t(Conj(Ukl)) + diag(P)) * LSkw))
-                
+                    diag(1/(1/result_Lambdas[, k, l] + 1)) %*% t(Conj(Ukl))                
                 par2 <- par2 + Re(sum(t(mat1) * LSkw))
-                
-                # sigmakl2_s[k, l, s] <- 1/rgamma(1, par1, rate = par2)
             }
-            
             sigmak2_s[k, s] <- 1/rgamma(1, par1, rate = par2)
         }
         
@@ -885,27 +777,6 @@ U_kls <- U_kls_all[, , , , 1]
                     summary() |>
                     print()
             }
-            
-            # Roberts and Rosenthal, Adaptive Metropolis within Gibbs
-            # modify the parameter by this amount
-            # deltan <- min(0.01, (s%/%50)^(-.5))
-            # 
-            # # calculate the recent acceptance rates
-            # curr_Ukl_acc_rate <-
-            #     apply(accCount_s[, , (s - 50 + 1):s], c(1, 2), mean)
-            # 
-            # # add or subtract a factor to the log st. dev. tuning parameter
-            # tau_Ukl[curr_Ukl_acc_rate >= .234] <-
-            #     exp(log(tau_Ukl[curr_Ukl_acc_rate >= .234]) + deltan)
-            # tau_Ukl[curr_Ukl_acc_rate < .234] <-
-            #     exp(log(tau_Ukl[curr_Ukl_acc_rate < .234]) - deltan)
-            # 
-            # if (show_tau_tune_summ) {
-            #     apply(accCount_s[, , (s - 50 + 1):s], c(1, 2), mean) |>
-            #         t() |>
-            #         summary() |>
-            #         print()
-            # }
             
             ### Sigmal adaptation
             curr_Sigmal_acc_rate <- 
