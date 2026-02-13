@@ -17,6 +17,8 @@ Tt <- 1024 # length of time series
 LL <- round(sqrt(Tt))
 # LL <- round(P+1)
 
+n_cores <- 2
+
 use_true_SDMs <- FALSE
 use_Id_Sigmal_init <- FALSE
 sample_true_Ukl0 <- FALSE
