@@ -1,3 +1,5 @@
+options(error = recover)
+
 library(splines)
 library(expm)
 
@@ -394,7 +396,7 @@ zetajk2_s[, , 1] <- 1/rgamma(d*K, tau2_a, rate = tau2_b)
 sigmak2_s <- array(NA, c(K, gibbsIts))
 sigmak2_s[, 1] <- sigmak02
 
-Sigmal_s <- array(NA, c(P, P, num_freqs, gibbsIts))
+Sigmal_s <- array(NA_complex_, c(P, P, num_freqs, gibbsIts))
 
 if (use_Id_Sigmal_init) {
     Sigmal_s[, , , 1] <- array(diag(P), c(P, P, num_freqs))
@@ -404,7 +406,7 @@ if (use_Id_Sigmal_init) {
     result_Sigmals <- Sigmal0
 }
 
-result_invSigmals <- array(NA, c(P, P, num_freqs))
+result_invSigmals <- array(NA_complex_, c(P, P, num_freqs))
 for (l in 1:num_freqs) {
     result_invSigmals[, , l] <- solve(result_Sigmals[, , l])
 }
@@ -421,17 +423,20 @@ result_Lambdas <- Lambdak_w_s[, , , 1]
 
 # parallel ----------------------------------------------------------------
 
-library(foreach)
-library(doParallel)
-
-cluster <- makeCluster(n_cores)
-registerDoParallel(cluster)
+if (useMclapply) {
+    library(foreach)
+    library(doParallel)
+    
+    cluster <- makeCluster(n_cores)
+    registerDoParallel(cluster)
+}
 
 # function for mclapply ---------------------------------------------------
 
 ksampler <- function(k) {
 # for (k in 1:K) {       
-    thisLambda <- array(NA, c(d, num_freqs))
+    # thisLambda <- array(NA, c(d, num_freqs))
+    thisLambda <- result_Lambdas[, k, ]
     thisUkl <- U_kls[, , k, ]
     thisAccCount <- rep(TRUE, num_freqs)
     
@@ -457,11 +462,14 @@ ksampler <- function(k) {
         
         ##### sample from a truncated Gamma distribution
         # lower and upper bounds for truncating the Gamma distribution
-        if (j == 1) lb <- 0 else lb <- 1 / (result_Lambdas[j-1, k, 1] + 1)
-        if (j == d) ub <- 1 else ub <- 1 / (result_Lambdas[j+1, k, 1] + 1)
+        # if (j == 1) lb <- 0 else lb <- 1 / (result_Lambdas[j-1, k, 1] + 1)
+        # if (j == d) ub <- 1 else ub <- 1 / (result_Lambdas[j+1, k, 1] + 1)
+        if (j == 1) lb <- 0 else lb <- 1 / (thisLambda[j-1, 1] + 1)
+        if (j == d) ub <- 1 else ub <- 1 / (thisLambda[j+1, 1] + 1)
         
         # by slice sampling, instead
-        xi_jk <- uni.slice(1/(1 + result_Lambdas[j, k, 1]),
+        # xi_jk <- uni.slice(1/(1 + result_Lambdas[j, k, 1]),
+        xi_jk <- uni.slice(1/(1 + thisLambda[j, 1]),
                            dgamma,
                            w = 1, m = Inf, lower = lb, upper = ub,
                            shape = LL+1, scale = 1/tjk,
@@ -475,7 +483,8 @@ ksampler <- function(k) {
     ### Lambda: frequencies in 2 to num_freqs-1
     if (Lambda_prior %in% c("1RW", "2RWPN")) {
         for ( l in sample(2:(num_freqs-1)) ) {
-            Ukw <- U_kls[, , k, l]
+            # Ukw <- U_kls[, , k, l]
+            Ukw <- thisUkl[, , l]
             Dkw1 <- data_list_w[[l]][[k]]
             
             for (j in sample(d)) {
@@ -487,21 +496,25 @@ ksampler <- function(k) {
                 
                 if (Lambda_prior == "2RWPN") {
                     # 2nd order RW, previous and next neighbors
-                    lp <- result_Lambdas[j, k, l-1]
-                    ln <- result_Lambdas[j, k, l+1]
+                    # lp <- result_Lambdas[j, k, l-1]
+                    # ln <- result_Lambdas[j, k, l+1]
+                    lp <- thisLambda[j, l-1]
+                    ln <- thisLambda[j, l+1]
                     mu <- (lp + ln)/2
                 }
                 
                 else if (Lambda_prior == "1RW") {
                     # 1st order RW
-                    mu <- result_Lambdas[j, k, l-1]
+                    # mu <- result_Lambdas[j, k, l-1]
+                    mu <- thisLambda[j, l-1]
                 }
                 
                 # for single smoothing parameter
-                varpar_jkl <- taujkl2_s[j, k, l-1, s-1]
+                # varpar_jkl <- taujkl2_s[j, k, l-1, s-1]
+                varpar_jkl <- thisTaujkl2[j, l-1]
                 
                 # by slice sampling, instead
-                newdraw <- uni.slice(result_Lambdas[j, k, l],
+                newdraw <- uni.slice(thisLambda[j, l],
                                      unnorm_logPDF,
                                      w = 1, m = Inf, lower = 0, 
                                      upper = Inf, 
@@ -516,7 +529,8 @@ ksampler <- function(k) {
     } # end of the conditional to check the type of prior for Lambda
     
     ### Lambda: last frequency
-    Uw1 <- U_kls[, , k, num_freqs]
+    # Uw1 <- U_kls[, , k, num_freqs]
+    Uw1 <- thisUkl[, , num_freqs]
     Dkw1 <- data_list_w[[num_freqs]][[k]]
     
     for (j in sample(d)) {
@@ -528,13 +542,15 @@ ksampler <- function(k) {
         ajk <- Re(ajk)
         
         # 1st order random walk
-        mu <- result_Lambdas[j, k, num_freqs - 1]
+        # mu <- result_Lambdas[j, k, num_freqs - 1]
+        mu <- thisLambda[j, num_freqs - 1]
         
         # by slice sampling, instead
-        newdraw <- uni.slice(result_Lambdas[j, k, num_freqs], 
+        newdraw <- uni.slice(thisLambda[j, num_freqs], 
                              unnorm_logPDF,
                              w = 1, m = Inf, lower = 0, upper = Inf, 
-                             tau2 = zetajk2_s[j, k, s-1], 
+                             # tau2 = zetajk2_s[j, k, s-1], 
+                             tau2 = thisZetajk2[j],
                              ajk = ajk, mu = mu, N = LL, 
                              logscale = TRUE)    
         # result_Lambdas[j, k, num_freqs] <- newdraw
@@ -651,11 +667,19 @@ ksampler <- function(k) {
         # ksamples <- foreach(k = 1:K) %dopar% {
 
         #} # end of sampling over 1:K
-        ksamples <- mclapply(1:K, ksampler, mc.cores = n_cores)
-        # ksamples <- lapply(1:K, ksampler)
+        if (useMclapply) {
+            ksamples <- mclapply(1:K, ksampler, mc.cores = n_cores)
+        } else {
+            ksamples <- lapply(1:K, ksampler)
+        }
         
         # save sampled values from the dopar list into iteration-level arrays
         for (k in 1:K) {
+            if (inherits(ksamples[[k]], "try-error") || 
+                is.character(ksamples[[k]])) {
+                stop(paste0("ksampler failed for k=", k, ": ", ksamples[[k]]))
+            }
+            
             U_kls[, , k, ] <- ksamples[[k]]$Ukl
             accCount[k, ] <- ksamples[[k]]$accCount
             result_Lambdas[, k, ] <- ksamples[[k]]$Lambdakl
@@ -685,7 +709,18 @@ ksampler <- function(k) {
             prop_par_s <- (Sigmals + Sigma_add*diag(P)) / (1 + Sigma_add)
             
             # Sigmap <- rFTCW(result_Sigmals[, , l], n_Sig[l], P, TRUE, TRUE)
-            Sigmap <- rFTCW(prop_par_s, n_Sig[l], P, TRUE, TRUE)
+            # Sigmap <- rFTCW(prop_par_s, n_Sig[l], P, TRUE, TRUE)
+            Sigmap <- tryCatch(
+                rFTCW(prop_par_s, n_Sig[l], P, useEigenR, byCholesky),
+                error = function(e) {
+                    cat("rFTCW failed at s =", s, ", l =", l, "\n")
+                    cat("n_Sig[l] =", n_Sig[l], "\n")
+                    cat("eigenvalues of prop_par_s:\n")
+                    print(eigen(prop_par_s)$values)
+                    stop(e)
+                }
+            )
+            
             # invSigmap <- solve(Sigmap)
             
             # prop_par_p <- Sigmap + Sigma_add*diag(P)
@@ -1080,4 +1115,3 @@ Re(diag(data_list_w[[l]][[k]]) / LL)
 # compare distances
 frob_dist(thisSDM, fkTR[, , k, l])
 frob_dist(data_list_w[[l]][[k]] / LL, fkTR[, , k, l])
-

@@ -128,17 +128,50 @@ uni.slice <- function (x0, g, w=1, m=Inf, lower=-Inf, upper=+Inf, gx0=NULL, ...)
 {
     # Check the validity of the arguments.
     
-    if (!is.numeric(x0) || length(x0)!=1
-        || !is.function(g) 
-        || !is.numeric(w) || length(w)!=1 || w<=0 
-        || !is.numeric(m) || !is.infinite(m) && (m<=0 || m>1e9 || floor(m)!=m)
-        || !is.numeric(lower) || length(lower)!=1 || x0<lower
-        || !is.numeric(upper) || length(upper)!=1 || x0>upper
-        || upper<=lower 
-        || !is.null(gx0) && (!is.numeric(gx0) || length(gx0)!=1))
-    { 
-        stop ("Invalid slice sampling argument")
-    }
+    # if (!is.numeric(x0) || length(x0)!=1
+    #     || !is.function(g) 
+    #     || !is.numeric(w) || length(w)!=1 || w<=0 
+    #     || !is.numeric(m) || !is.infinite(m) && (m<=0 || m>1e9 || floor(m)!=m)
+    #     || !is.numeric(lower) || length(lower)!=1 || x0<lower
+    #     || !is.numeric(upper) || length(upper)!=1 || x0>upper
+    #     || upper<=lower 
+    #     || !is.null(gx0) && (!is.numeric(gx0) || length(gx0)!=1))
+    # { 
+    #     stop ("Invalid slice sampling argument")
+    # }
+    
+    # Check the validity of the arguments.
+    if (!is.numeric(x0) || length(x0)!=1)
+        stop("x0 must be a single numeric value, got: ", class(x0)[1], " of length ", length(x0))
+    
+    if (!is.function(g))
+        stop("g must be a function, got: ", class(g)[1])
+    
+    if (!is.numeric(w) || length(w)!=1 || w<=0)
+        stop("w must be a single positive numeric value, got: ", 
+             if(is.numeric(w)) paste0("w=", w) else class(w)[1])
+    
+    if (!is.numeric(m) || (!is.infinite(m) && (m<=0 || m>1e9 || floor(m)!=m)))
+        stop("m must be Inf or a positive integer ≤1e9, got: m=", m)
+    
+    if (!is.numeric(lower) || length(lower)!=1)
+        stop("lower must be a single numeric value, got: ", class(lower)[1])
+    
+    if (x0 < lower)
+        stop("x0 must be >= lower, got: x0=", x0, ", lower=", lower)
+    
+    if (!is.numeric(upper) || length(upper)!=1)
+        stop("upper must be a single numeric value, got: ", class(upper)[1])
+    
+    if (x0 > upper)
+        stop("upper must be >= x0, got: x0=", x0, ", upper=", upper)
+    
+    if (upper <= lower)
+        stop("upper must be > lower, got: upper=", upper, ", lower=", lower)
+    
+    if (!is.null(gx0) && (!is.numeric(gx0) || length(gx0)!=1))
+        stop("gx0 must be NULL or a single numeric value, got: ", 
+             class(gx0)[1], " of length ", length(gx0))
     
     # Keep track of the number of calls made to this function.
     

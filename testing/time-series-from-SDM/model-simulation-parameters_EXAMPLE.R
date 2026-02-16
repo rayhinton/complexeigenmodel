@@ -17,6 +17,7 @@ Tt <- 1024 # length of time series
 LL <- round(sqrt(Tt))
 # LL <- round(P+1)
 
+useMclapply <- FALSE
 n_cores <- 2
 
 use_true_SDMs <- FALSE
@@ -58,6 +59,8 @@ CayleyZeroProb <- 0.5
 ### Sigmal MH tuning parameters
 n_Sig <- rep(50, num_freqs)
 Sigma_add <- 0.001
+useEigenR <- TRUE 
+byCholesky <- TRUE
 
 # grid of frequencies to calculate over
 omegaw <- seq(1/Tt, by = 1/Tt, length.out = num_freqs)
