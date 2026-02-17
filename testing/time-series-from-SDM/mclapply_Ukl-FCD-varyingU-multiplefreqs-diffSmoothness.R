@@ -1,5 +1,3 @@
-options(error = recover)
-
 library(splines)
 library(expm)
 
