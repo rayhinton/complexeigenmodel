@@ -1076,6 +1076,10 @@ for (k in 1:K) {
     }
 }
 
+# Root Mean Squared Error
+rowMeans(posterior_dists)
+rowMeans(multitaper_dists)
+
 for (k in 1:K) {
     cat(paste0("\nk = ", k, "\n"))
     quantile(as.vector(posterior_dists[k, ]), 
