@@ -25,7 +25,7 @@ rcomplex_wishart <- function(df, Sigma, useEigenR = FALSE, byCholesky = FALSE, H
     
     # Parameter validation
     if (!is.numeric(df) || df < p || df != round(df)) {
-        stop("df must be an integer and df >= p")
+        stop("df must be an integer and df >= p. (df = ", df, ")")
     }
     
     if (!is.numeric(p) || p <= 0 || p != round(p)) {
