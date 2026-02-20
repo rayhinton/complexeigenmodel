@@ -57,7 +57,7 @@ doCayleyZeros <- FALSE
 CayleyZeroProb <- 0.5
 
 ### Sigmal MH tuning parameters
-n_Sig <- rep(50, num_freqs)
+n_Sig <- rep(max(50, P*2), num_freqs)
 Sigma_add <- 0.001
 useEigenR <- TRUE 
 byCholesky <- TRUE
