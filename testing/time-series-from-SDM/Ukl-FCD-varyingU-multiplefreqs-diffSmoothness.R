@@ -270,11 +270,13 @@ for (k in 1:K) {
 Yts <- array(0, c(P, K, Tt))
 
 for (k in 1:K) {
-    for (t in 1:Tt) {
-        for (l in 1:Tt) {
-            Yts[, k, t] <- Yts[, k, t] + 
-                Rfs[, , k, l] %*% Zs[, k, l] * exp(2 * pi * 1i * l/Tt * t)
-        }
+    W <- sapply(1:Tt, function(l) Rfs[, , k, l] %*% Zs[, k, l])
+    
+    phase_W <- exp(2i * pi * (1:Tt) / Tt)
+    phase_t <- exp(2i * pi * (0:(Tt-1)) / Tt)
+    
+    for (j in 1:P) {
+        Yts[j, k, ] <- fft(W[j, ] * phase_W, inverse = TRUE) * phase_t
     }
 }
 
