@@ -244,7 +244,12 @@ for (k in 1:K) {
     for (t in 1:Tt) {
         # need lower triangular part, take t(Conj())
         # AFAICT, this is the unique Chol. with positive real diagonals
-        Rfs[, , k, t] <- t(Conj(EigenR::Eigen_chol(fkTR[, , k, t])))
+        # Rfs[, , k, t] <- t(Conj(EigenR::Eigen_chol(fkTR[, , k, t])))
+        
+        Rkt <- EigenR::Eigen_sqrt(fkTR[, , k, t])
+        diag(Rkt) <- Re(diag(Rkt))
+        Rkt <- ( Rkt + t(Conj(Rkt)) )/2
+        Rfs[, , k, t] <- Rkt
     }
 }
 
