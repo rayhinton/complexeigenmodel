@@ -1,5 +1,6 @@
 library(splines)
 library(expm)
+library(ggplot2)
 
 if (!interactive()) {
     pdf(tempfile(fileext = ".pdf"))
@@ -158,6 +159,8 @@ result_dir <- gsub("__", "_", result_dir)
 
 dir.create(result_dir, recursive = TRUE)
 dir.create(file.path(result_dir, "post-SDM-est-dist-density"), 
+           recursive = TRUE)
+dir.create(file.path(result_dir, "compare-SDM-powers"), 
            recursive = TRUE)
 
 # save the parameters file in the results directory, for later reference
@@ -1145,6 +1148,8 @@ save_plot_pdf(file.path(result_dir, paste0("post-sigmak2-k-", k, ".pdf")))
 posterior_dists <- array(NA, c(K, num_freqs))
 multitaper_dists <- array(NA, c(K, num_freqs))
 
+post_mean_SDMs <- array(NA, c(P, P, K, num_freqs))
+
 for (k in 1:K) {
     for (l in 1:num_freqs) {
         thisSDM <- matrix(0 + 0i, P, P)
@@ -1155,6 +1160,7 @@ for (k in 1:K) {
         }
         
         thisSDM <- thisSDM / length(gibbsPostBurn)
+        post_mean_SDMs[, , k, l] <- thisSDM
         
         # compare distances
         posterior_dists[k, l] <- frob_dist(thisSDM, fkTR[, , k, l])
@@ -1162,6 +1168,25 @@ for (k in 1:K) {
                                       fkTR[, , k, l])
     }
 }
+
+# Root Mean Squared Error
+sigmak02
+
+cbind(
+    posterior = rowMeans((posterior_dists/P)^2),
+    multitaper = rowMeans((multitaper_dists/P)^2),
+    scaled_post = rowMeans((posterior_dists/P)^2 / sigmak02),
+    scaled_multi = rowMeans((multitaper_dists/P)^2 / sigmak02)
+)
+
+# AMSE, posterior
+rowMeans((posterior_dists/P)^2) |> mean()
+# AMSE, multitaper
+rowMeans((multitaper_dists/P)^2) |> mean()
+# AMSE, scaled posterior
+rowMeans((posterior_dists/P)^2 / sigmak02) |> mean()
+# AMSE, scaled multitaper
+rowMeans((multitaper_dists/P)^2 / sigmak02) |> mean()
 
 for (k in 1:K) {
     cat(paste0("\nk = ", k, "\n"))
@@ -1203,3 +1228,57 @@ Re(diag(data_list_w[[l]][[k]]) / LL)
 frob_dist(thisSDM, fkTR[, , k, l])
 frob_dist(data_list_w[[l]][[k]] / LL, fkTR[, , k, l])
 
+# compare true, multitaper, and posterior mean SDMs -----------------------
+
+SDMests_df <- data.frame()
+trueSDM_df <- data.frame()
+post_ests_df <- data.frame()
+
+for (k in 1:K) {
+    for (j in 1:P) {
+        SDMests_df <- rbind(SDMests_df, 
+                            data.frame(power = Re(SDMests[[k]][j, j, 1:num_freqs]),
+                                       k = k,
+                                       j = j,
+                                       l = 1:num_freqs,
+                                       datalabel = "multitaper")
+        )
+        
+        trueSDM_df <- rbind(trueSDM_df,
+                            data.frame(
+                                power = Re(fkTR[j, j, k, 1:num_freqs]),
+                                k = k,
+                                j = j,
+                                l = 1:num_freqs,
+                                datalabel = "true"
+                            ))
+        
+        post_ests_df <- rbind(post_ests_df,
+                              data.frame(
+                                  power = Re(post_mean_SDMs[j, j, k, ]),
+                                  k = k,
+                                  j = j,
+                                  l = 1:num_freqs,
+                                  datalabel = "post. mean"
+                              ))
+    }
+}
+
+SDMests_df <- dplyr::mutate(SDMests_df, across(c(k, j, datalabel), as.factor))
+trueSDM_df <- dplyr::mutate(trueSDM_df, across(c(k, j, datalabel), as.factor))
+post_ests_df <- dplyr::mutate(post_ests_df, across(c(k, j, datalabel), as.factor))
+
+all_df <- rbind(SDMests_df, trueSDM_df, post_ests_df)
+all_df$datalabel <- factor(all_df$datalabel, 
+                           levels = c("true", "multitaper", "post. mean"))
+
+for (kk in 1:K) {
+    plotp <- dplyr::filter(all_df, k == kk) |> 
+        ggplot(aes(x = l, y = power)) +
+        geom_line(aes(color = j, linetype = datalabel)) +
+        ggtitle(paste0("True and est. SDMs, k = ", kk))
+    print(plotp)
+    save_plot_pdf(file.path(result_dir, "compare-SDM-powers",
+                            paste0("compare-SDM-powers-k-", kk, ".pdf")))
+    
+}
