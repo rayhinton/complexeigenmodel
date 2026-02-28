@@ -723,9 +723,9 @@ ksampler <- function(k) {
             # zetajk2_s[, k, s] <- ksamples[[k]]$zetajk2
             # sigmak2_s[k, s] <- ksamples[[k]]$sigmak2
             
-            result_taujkl2 <- ksamples[[k]]$taujkl2
-            result_zetajk2 <- ksamples[[k]]$zetajk2
-            result_sigmak2 <- ksamples[[k]]$sigmak2
+            result_taujkl2[, k, ] <- ksamples[[k]]$taujkl2
+            result_zetajk2[, k] <- ksamples[[k]]$zetajk2
+            result_sigmak2[k] <- ksamples[[k]]$sigmak2
         }
             
         # save this iteration into sampler-level arrays
@@ -733,9 +733,9 @@ ksampler <- function(k) {
         accCount_s[, , s] <- accCount
         Lambdak_l_s[, , , s] <- result_Lambdas
         
-        taujkl2_s[, k, , s] <- result_taujkl2
-        zetajk2_s[, k, s] <- result_zetajk2
-        sigmak2_s[k, s] <- result_sigmak2
+        taujkl2_s[, , , s] <- result_taujkl2
+        zetajk2_s[, , s] <- result_zetajk2
+        sigmak2_s[, s] <- result_sigmak2
         
         #####
         # Sigmal sampling
