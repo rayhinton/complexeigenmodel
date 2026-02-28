@@ -387,8 +387,8 @@ save_plot_pdf(file.path(result_dir, "SDM-est-and-true-2.pdf"))
 U_kls_all <- array(NA, c(P, d, K, num_freqs, gibbsIts))
 U_kls_all[, , , , 1] <- U_kl0[, , , 1:num_freqs]
 
-Lambdak_w_s <- array(NA, c(d, K, num_freqs, gibbsIts))
-Lambdak_w_s[, , , 1] <- Lambdakl0[, , 1:num_freqs]
+Lambdak_l_s <- array(NA, c(d, K, num_freqs, gibbsIts))
+Lambdak_l_s[, , , 1] <- Lambdakl0[, , 1:num_freqs]
 
 #taujk2_s <- array(NA, c(d, K, gibbsIts))
 #taujk2_s[, , 1] <- 1/rgamma(d*K, tau2_a, rate = tau2_b)
@@ -427,7 +427,10 @@ accCount_Sigma_s[, 1] <- TRUE
 
 # temporary matrices with the first samples
 U_kls <- U_kls_all[, , , , 1]
-result_Lambdas <- Lambdak_w_s[, , , 1]
+result_Lambdas <- Lambdak_l_s[, , , 1]
+result_taujkl2 <- taujkl2_s[, , , 1]
+result_zetajk2 <- zetajk2_s[, , 1]
+result_sigmak2 <- sigmak2_s[, 1]
 
 # parallel ----------------------------------------------------------------
 
@@ -448,10 +451,13 @@ ksampler <- function(k) {
     thisUkl <- U_kls[, , k, ]
     thisAccCount <- rep(TRUE, num_freqs)
     
-    thisTaujkl2 <- taujkl2_s[, k, , s-1]
-    thisZetajk2 <- zetajk2_s[, k, s-1]
-    
-    thisSigmak2 <- sigmak2_s[k, s-1]
+    # thisTaujkl2 <- taujkl2_s[, k, , s-1]
+    # thisZetajk2 <- zetajk2_s[, k, s-1]
+    # thisSigmak2 <- sigmak2_s[k, s-1]
+
+    thisTaujkl2 <- result_taujkl2[, k, ]
+    thisZetajk2 <- result_zetajk2[, k]
+    thisSigmak2 <- result_sigmak2[k]
 
     ##### Lambda sampling
     
@@ -520,7 +526,6 @@ ksampler <- function(k) {
                 }
                 
                 # for single smoothing parameter
-                # varpar_jkl <- taujkl2_s[j, k, l-1, s-1]
                 varpar_jkl <- thisTaujkl2[j, l-1]
                 
                 # by slice sampling, instead
@@ -559,7 +564,6 @@ ksampler <- function(k) {
         newdraw <- uni.slice(thisLambda[j, num_freqs], 
                              unnorm_logPDF,
                              w = 1, m = Inf, lower = 0, upper = Inf, 
-                             # tau2 = zetajk2_s[j, k, s-1], 
                              tau2 = thisZetajk2[j],
                              ajk = ajk, mu = mu, N = LL, 
                              logscale = TRUE)    
@@ -715,16 +719,23 @@ ksampler <- function(k) {
             accCount[k, ] <- ksamples[[k]]$accCount
             result_Lambdas[, k, ] <- ksamples[[k]]$Lambdakl
             
-            taujkl2_s[, k, , s] <- ksamples[[k]]$taujkl2
-            zetajk2_s[, k, s] <- ksamples[[k]]$zetajk2
+            # taujkl2_s[, k, , s] <- ksamples[[k]]$taujkl2
+            # zetajk2_s[, k, s] <- ksamples[[k]]$zetajk2
+            # sigmak2_s[k, s] <- ksamples[[k]]$sigmak2
             
-            sigmak2_s[k, s] <- ksamples[[k]]$sigmak2
+            result_taujkl2 <- ksamples[[k]]$taujkl2
+            result_zetajk2 <- ksamples[[k]]$zetajk2
+            result_sigmak2 <- ksamples[[k]]$sigmak2
         }
             
         # save this iteration into sampler-level arrays
         U_kls_all[, , , , s] <- U_kls
         accCount_s[, , s] <- accCount
-        Lambdak_w_s[, , , s] <- result_Lambdas
+        Lambdak_l_s[, , , s] <- result_Lambdas
+        
+        taujkl2_s[, k, , s] <- result_taujkl2
+        zetajk2_s[, k, s] <- result_zetajk2
+        sigmak2_s[k, s] <- result_sigmak2
         
         #####
         # Sigmal sampling
@@ -814,26 +825,6 @@ ksampler <- function(k) {
         
         ### end of Sigmal sampling
         
-        ### sigmakl2 sampling
-        
-        # for (k in 1:K) {
-        #     par1 <- num_freqs*P*LL
-        #     par2 <- 0
-        #     
-        #     for (l in 1:num_freqs) {
-        #         LSkw <- data_list_w[[l]][[k]]
-        #         Ukl <- U_kls[, , k, l]
-        #         Lambdakl <- diag(result_Lambdas[, k, l])
-        #         
-        #         mat1 <- diag(P) - Ukl %*% 
-        #             diag(1/(1/result_Lambdas[, k, l] + 1)) %*% t(Conj(Ukl))                
-        #         par2 <- par2 + Re(sum(t(mat1) * LSkw))
-        #     }
-        #     sigmak2_s[k, s] <- 1/rgamma(1, par1, rate = par2)
-        # }
-        
-        ### end of sigmakl2 sampling
-        
         ### do adaptation of the Ukl MH tuning parameter
         if (s %in% tau_s_check) {
             cat(paste0("\n", s, ": Check for tau_Ukl adaptation\n"))
@@ -906,12 +897,12 @@ rowMeans(accCount_Sigma_s[, gibbsPostBurn]) |>
 
 # evaluate Lambdas --------------------------------------------------------
 
-upper_q <- apply(Lambdak_w_s[, , , gibbsPostBurn], 
+upper_q <- apply(Lambdak_l_s[, , , gibbsPostBurn], 
                  c(1, 2, 3), quantile, probs = 0.975)
-lower_q <- apply(Lambdak_w_s[, , , gibbsPostBurn], 
+lower_q <- apply(Lambdak_l_s[, , , gibbsPostBurn], 
                  c(1, 2, 3), quantile, probs = 0.025)
-# Lambda_means <- apply(Lambdak_w_s, c(1, 2, 3), mean)
-Lambda_means <- apply(Lambdak_w_s[, , , gibbsPostBurn], c(1, 2, 3), mean)
+# Lambda_means <- apply(Lambdak_l_s, c(1, 2, 3), mean)
+Lambda_means <- apply(Lambdak_l_s[, , , gibbsPostBurn], c(1, 2, 3), mean)
 
 k <- 1
 
@@ -1098,7 +1089,7 @@ for (k in 1:K) {
         thisSDM <- matrix(0 + 0i, P, P)
         for (s in gibbsPostBurn) {
             thisSDM <- thisSDM + sigmak2_s[k, s] * 
-                (U_kls_all[, , k, l, s] %*% diag(Lambdak_w_s[, k, l, s])
+                (U_kls_all[, , k, l, s] %*% diag(Lambdak_l_s[, k, l, s])
                  %*% t(Conj(U_kls_all[, , k, l, s])) + diag(P))
         }
         
@@ -1154,7 +1145,7 @@ l <- 75
 thisSDM <- matrix(0 + 0i, P, P)
 for (s in gibbsPostBurn) {
     thisSDM <- thisSDM + sigmak2_s[k, s] * 
-        (U_kls_all[, , k, l, s] %*% diag(Lambdak_w_s[, k, l, s])
+        (U_kls_all[, , k, l, s] %*% diag(Lambdak_l_s[, k, l, s])
          %*% t(Conj(U_kls_all[, , k, l, s])) + diag(P))
 }
 
