@@ -450,6 +450,8 @@ ksampler <- function(k) {
     
     thisTaujkl2 <- taujkl2_s[, k, , s-1]
     thisZetajk2 <- zetajk2_s[, k, s-1]
+    
+    thisSigmak2 <- sigmak2_s[k, s-1]
 
     ##### Lambda sampling
     
@@ -466,7 +468,7 @@ ksampler <- function(k) {
         # but may have a small complex part due to numerical issues.)
         tjk <- Re( t(Conj(Ukl[, j])) %*% LSkw %*% Ukl[, j] ) / 
             #sigmakl2_s[k, 1, s-1]
-            sigmak2_s[k, s-1]
+            thisSigmak2
         
         ##### sample from a truncated Gamma distribution
         # lower and upper bounds for truncating the Gamma distribution
@@ -498,7 +500,7 @@ ksampler <- function(k) {
             for (j in sample(d)) {
                 ajk <- t(Conj(Ukw[, j])) %*% Dkw1 %*% Ukw[, j] / 
                     # sigmakl2_s[k, l, s-1]
-                    sigmak2_s[k, s-1]
+                    thisSigmak2
                 # should be strictly real
                 ajk <- Re(ajk)
                 
@@ -544,7 +546,7 @@ ksampler <- function(k) {
     for (j in sample(d)) {
         ajk <- t(Conj(Uw1[, j])) %*% Dkw1 %*% Uw1[, j] / 
             # sigmakl2_s[k, num_freqs, s-1]
-            sigmak2_s[k, s-1]
+            thisSigmak2
         # should be strictly real - this is done in the existing Lambda
         # FCD sampler.
         ajk <- Re(ajk)
@@ -609,8 +611,6 @@ ksampler <- function(k) {
     
     # calculate traces and other terms, for the MH acceptance ratio
     for (l in 1:num_freqs) {
-        # sigma_k2 <- sigmakl2_s[k, l, s-1]
-        sigma_k2 <- sigmak2_s[k, s-1]
         # Sigmas <- Sigmal0[, , l]
         # invSigmas <- invSigmal0[, , l]
         invSigmas <- result_invSigmals[, , l]
@@ -639,7 +639,7 @@ ksampler <- function(k) {
                                                  invSigmas %*% Us )))
         
         # calculate acceptance ratio
-        logr <- tracep/sigma_k2 - P*logdetp - traces/sigma_k2 + P*logdets
+        logr <- tracep/thisSigmak2 - P*logdetp - traces/thisSigmak2 + P*logdets
         
         # accept or reject
         if (log(runif(1)) <= logr) {
@@ -656,10 +656,33 @@ ksampler <- function(k) {
     
     } # end of conditional to sample random or true values
     
+    ### sigmakl2 sampling
+
+    par1 <- num_freqs*P*LL
+    par2 <- 0
+    
+    for (l in 1:num_freqs) {
+        LSkw <- data_list_w[[l]][[k]]
+        
+        # Ukl <- U_kls[, , k, l]
+        # Lambdakl <- diag(result_Lambdas[, k, l])
+        Ukl <- thisUkl[, , l]
+        Lambdakl <- thisLambda[, l]
+        
+        #mat1 <- diag(P) - Ukl %*% 
+            #diag(1/(1/result_Lambdas[, k, l] + 1)) %*% t(Conj(Ukl))
+        mat1 <- diag(P) - Ukl %*% diag(1/(1/Lambdakl + 1)) %*% t(Conj(Ukl))
+        par2 <- par2 + Re(sum(t(mat1) * LSkw))
+    }
+    thisSigmak2 <- 1/rgamma(1, par1, rate = par2)
+    
+    ### end of sigmakl2 sampling
+    
     # return this value for the dopar for loop
     list(Lambdakl = thisLambda, 
          taujkl2 = thisTaujkl2, zetajk2 = thisZetajk2,
-         Ukl = thisUkl, accCount = thisAccCount)
+         Ukl = thisUkl, accCount = thisAccCount,
+         sigmak2 = thisSigmak2)
 } # end of ksampler function
 
 # sampling ----------------------------------------------------------------
@@ -694,6 +717,8 @@ ksampler <- function(k) {
             
             taujkl2_s[, k, , s] <- ksamples[[k]]$taujkl2
             zetajk2_s[, k, s] <- ksamples[[k]]$zetajk2
+            
+            sigmak2_s[k, s] <- ksamples[[k]]$sigmak2
         }
             
         # save this iteration into sampler-level arrays
@@ -791,21 +816,21 @@ ksampler <- function(k) {
         
         ### sigmakl2 sampling
         
-        for (k in 1:K) {
-            par1 <- num_freqs*P*LL
-            par2 <- 0
-            
-            for (l in 1:num_freqs) {
-                LSkw <- data_list_w[[l]][[k]]
-                Ukl <- U_kls[, , k, l]
-                Lambdakl <- diag(result_Lambdas[, k, l])
-                
-                mat1 <- diag(P) - Ukl %*% 
-                    diag(1/(1/result_Lambdas[, k, l] + 1)) %*% t(Conj(Ukl))                
-                par2 <- par2 + Re(sum(t(mat1) * LSkw))
-            }
-            sigmak2_s[k, s] <- 1/rgamma(1, par1, rate = par2)
-        }
+        # for (k in 1:K) {
+        #     par1 <- num_freqs*P*LL
+        #     par2 <- 0
+        #     
+        #     for (l in 1:num_freqs) {
+        #         LSkw <- data_list_w[[l]][[k]]
+        #         Ukl <- U_kls[, , k, l]
+        #         Lambdakl <- diag(result_Lambdas[, k, l])
+        #         
+        #         mat1 <- diag(P) - Ukl %*% 
+        #             diag(1/(1/result_Lambdas[, k, l] + 1)) %*% t(Conj(Ukl))                
+        #         par2 <- par2 + Re(sum(t(mat1) * LSkw))
+        #     }
+        #     sigmak2_s[k, s] <- 1/rgamma(1, par1, rate = par2)
+        # }
         
         ### end of sigmakl2 sampling
         
