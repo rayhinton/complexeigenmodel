@@ -77,9 +77,9 @@ frob_dist <- function(A, B, returnDists = FALSE) {
 
 fast_evec_Frob_stat <- function(X, Y) {
     k <- ncol(X)
-    return(
-        sqrt(2*k - 2*sum(Mod( diag(t(Conj(X)) %*% Y)) ))
-    )
+    val <- 2*k - 2*sum(Mod( diag(t(Conj(X)) %*% Y)) )
+    # assuming the two matrices are semi-unitary, this value should always be at least 0
+    return(sqrt(max(val, 0)))
 }
 
 evec_Frob_stat <- function(X, Y, returnDists = FALSE, returnMats = FALSE) {
