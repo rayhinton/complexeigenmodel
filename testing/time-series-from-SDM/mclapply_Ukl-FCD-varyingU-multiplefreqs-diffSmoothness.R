@@ -873,7 +873,8 @@ ksampler <- function(k) {
 
 # analysis ----------------------------------------------------------------
 
-source("testing/time-series-from-SDM/post-sampling-analysis.R")
+source("testing/time-series-from-SDM/post-sampling-analysis.R", 
+       print.eval = TRUE)
 
 # evaluate ----------------------------------------------------------------
 # stopCluster(cl = cluster)

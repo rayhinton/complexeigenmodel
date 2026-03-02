@@ -1,5 +1,9 @@
 # if you are running this after the fact: be sure to load the RData file
 
+catout <- function(printtext) {
+    cat(paste0("\n", printtext, "\n"))
+}
+
 # check run time and some MH acceptance rate summaries --------------------
 
 print(endtime - starttime)
@@ -7,14 +11,17 @@ print(endtime - starttime)
 # check the acceptance rates
 gibbsPostBurn <- round(gibbsIts * burnin):gibbsIts
 
+catout("sample-wise summary of Ukl acc. rates, all and post burn-in")
 apply(accCount_s[, , 2:gibbsIts], c(1, 2), mean) |> t() |> summary()
 apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean) |> t() |> summary()
 
+catout("overall summary of Ukl acc. rates, post burn-in")
 apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean) |>
     as.vector() |> 
     quantile(probs = c(0, 0.025, .25, .5, .75, .975, 1))
 
 # check Sigmal acceptance rates
+catout("Sigmal acc. rates, all and post burn-in")
 rowMeans(accCount_Sigma_s) |> 
     quantile(probs = c(0, 0.025, .25, .5, .75, .975, 1))
 rowMeans(accCount_Sigma_s[, gibbsPostBurn]) |> 
@@ -62,12 +69,15 @@ for (k in 1:K) {
     }
 }
 
-summary(as.vector(ds_to_true))
+# summary(as.vector(ds_to_true))
+catout("summary of axis Frobenius distances from sample mean Ukl to true Ukl0")
 quantile(as.vector(ds_to_true), probs = c(0, 0.025, 0.25, 0.5, 0.75, 0.975, 1))
+catout("how many distances are >= sqrt(2): ")
 sum(ds_to_true >= sqrt(2))
-which(ds_to_true >= sqrt(2), arr.ind = TRUE)
+# which(ds_to_true >= sqrt(2), arr.ind = TRUE)
 
 # get the k and l indices for the Ukl with max and min distances to truth
+catout("k and l indices of Ukl with max and min dist. to true Ukl0")
 which.max(ds_to_true) |> arrayInd(.dim = dim(ds_to_true))
 which.min(ds_to_true) |> arrayInd(.dim = dim(ds_to_true))
 
@@ -158,6 +168,7 @@ quantile(n_Sig, c(0, .025, .25, .5, .75, .975, 1))
 l <- ind_far_Ukl[2]
 
 # check Sigmal acceptance rates
+catout("total and post burn-in acc. rates of Sigmal at l for furthest Ukl")
 mean(accCount_Sigma_s[l, ])
 mean(accCount_Sigma_s[l, gibbsPostBurn])
 
@@ -185,22 +196,18 @@ save_plot_pdf(file.path(result_dir,
 
 par(mfrow = c(1, 1), mar = c(5.1, 4.1, 4.1, 2.1))
 
-# how many Sigmal have 0 acceptance rate?
+catout("how many and what fraction of Sigmal have 0 acceptance rate?")
 sum(rowMeans(accCount_Sigma_s[, gibbsPostBurn]) == 0)
 # what fraction have 0 acceptance rate?
 sum(rowMeans(accCount_Sigma_s[, gibbsPostBurn]) == 0) / num_freqs
 # show the indices of which ones have 0 acceptance rate
-which(rowMeans(accCount_Sigma_s[, gibbsPostBurn]) == 0)
+# which(rowMeans(accCount_Sigma_s[, gibbsPostBurn]) == 0)
 
 # smoothing parameter summaries -------------------------------------------
 
-dim(taujkl2_s)
-dim(taujkl2_s[1, 1, 1, gibbsPostBurn])
-length(taujkl2_s[1, 1, 1, gibbsPostBurn])
-length(taujkl2_s[1, 1, round(num_freqs/2), gibbsPostBurn])
-
 plot(taujkl2_s[1, 1, 1, gibbsPostBurn], type = "l")
 
+catout("median of taujkl2 samples at some diff j, k, and l")
 median(taujkl2_s[1, 1, 1, gibbsPostBurn])
 
 median(taujkl2_s[1, 1, 150, gibbsPostBurn])
@@ -211,8 +218,7 @@ median(taujkl2_s[1, 1, 350, gibbsPostBurn])
 
 # evaluate sigmak2 -------------------------------------------------------
 
-sigmak02[1]
-sigmak02[2]
+catout("true sigmak02 and posterior quantiles for some k")
 
 k <- 1
 sigmak02[k]
@@ -261,9 +267,11 @@ for (k in 1:K) {
     }
 }
 
-# Root Mean Squared Error
+# Mean Squared Error
+catout("true sigmak02")
 sigmak02
 
+catout("individual MSE for estimated SDMs")
 cbind(
     posterior = rowMeans((posterior_dists/P)^2),
     multitaper = rowMeans((multitaper_dists/P)^2),
@@ -271,14 +279,14 @@ cbind(
     scaled_multi = rowMeans((multitaper_dists/P)^2 / sigmak02)
 )
 
-# AMSE, posterior
-rowMeans((posterior_dists/P)^2) |> mean()
-# AMSE, multitaper
-rowMeans((multitaper_dists/P)^2) |> mean()
-# AMSE, scaled posterior
-rowMeans((posterior_dists/P)^2 / sigmak02) |> mean()
-# AMSE, scaled multitaper
-rowMeans((multitaper_dists/P)^2 / sigmak02) |> mean()
+# AMSE, unscaled and scaled matrices
+catout("AMSE, posterior and multitaper")
+c(rowMeans((posterior_dists/P)^2) |> mean(),
+  rowMeans((multitaper_dists/P)^2) |> mean())
+
+catout("AMSE, scaled posterior vs. scaled multitaper")
+c(rowMeans((posterior_dists/P)^2 / sigmak02) |> mean(),
+  rowMeans((multitaper_dists/P)^2 / sigmak02) |> mean())
 
 for (k in 1:K) {
     cat(paste0("\nk = ", k, "\n"))
@@ -297,28 +305,6 @@ for (k in 1:K) {
     save_plot_pdf(file.path(result_dir, "post-SDM-est-dist-density",
                             paste0("post-SDM-est-dist-density-k-", k, ".pdf")))
 }
-
-k <- 1
-l <- 75
-thisSDM <- matrix(0 + 0i, P, P)
-for (s in gibbsPostBurn) {
-    thisSDM <- thisSDM + sigmak2_s[k, s] * 
-        (U_kls_all[, , k, l, s] %*% diag(Lambdak_l_s[, k, l, s])
-         %*% t(Conj(U_kls_all[, , k, l, s])) + diag(P))
-}
-
-thisSDM <- thisSDM / length(gibbsPostBurn)
-
-# true SDM
-Re(diag(fkTR[, , k, l]))
-# posterior mean
-Re(diag(thisSDM))
-# multitaper estimate
-Re(diag(data_list_w[[l]][[k]]) / LL)
-
-# compare distances
-frob_dist(thisSDM, fkTR[, , k, l])
-frob_dist(data_list_w[[l]][[k]] / LL, fkTR[, , k, l])
 
 # compare true, multitaper, and posterior mean SDMs -----------------------
 
@@ -356,6 +342,7 @@ for (kk in 1:K) {
         ggplot(aes(x = l, y = power)) +
         geom_line(aes(color = j, linetype = datalabel), linewidth = .3) +
         ggtitle(paste0("True and est. SDMs, k = ", kk))
+    
     print(plotp)
     save_plot_pdf(file.path(result_dir, "compare-SDM-powers",
                             paste0("compare-SDM-powers-k-", kk, ".pdf")))
@@ -444,7 +431,6 @@ for (k in 1:K) {
     save_plot_pdf(file.path(result_dir, "SDM-est-coherence-and-phase",
                             paste0("SDM-est-phases-k-", k, ".pdf")))
 } # end of for loop
-
 
 # plot likelihood of data -------------------------------------------------
 

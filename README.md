@@ -7,6 +7,7 @@ In collaboration with Dr. Scott Bruce, Dr. Jamshid Namdari, and Dr. Brani Vidako
 - EigenR
 - waveslim
 - astsa
+- posterior
 
 # Credit
 
