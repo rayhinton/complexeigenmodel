@@ -52,22 +52,14 @@ unnorm_logPDF <- function(x, tau2, ajk, mu, N, logscale = FALSE) {
 
 logd_Uk <- function(Us, lw, invSigmas, sigma_k2, result_Lambdas, data_list_w, 
                     num_freqs, k) {
-    
-    # invSigmas <- solve(Sigmas)
-    
     # calculate traces and other terms, for the MH acceptance ratio
-    # for (l in 1:num_freqs) {
     Skl <- data_list_w[[lw]][[k]]
     lambdakl <- result_Lambdas[, k, lw]
     Omegakl <- diag(lambdakl / (1 + lambdakl))
     
-    # trace <- Re(sum(diag( Us %*% Omegakl %*% t(Conj(Us)) %*% Skl )))
     traces <- Re(sum(Conj(Us) * (Skl %*% Us %*% Omegakl)))
-    
-    # } # end of summing over frequencies
-    
     logdets <- log(Re(EigenR::Eigen_det( t(Conj(Us)) %*% invSigmas %*% Us )))
-    
+
     logdens <- traces/sigma_k2 - P*logdets
     
     return(logdens)
@@ -245,10 +237,6 @@ Rfs <- array(NA, c(P, P, K, Tt))
 
 for (k in 1:K) {
     for (t in 1:Tt) {
-        # need lower triangular part, take t(Conj())
-        # AFAICT, this is the unique Chol. with positive real diagonals
-        # Rfs[, , k, t] <- t(Conj(EigenR::Eigen_chol(fkTR[, , k, t])))
-       
         Rkt <- EigenR::Eigen_sqrt(fkTR[, , k, t])
         diag(Rkt) <- Re(diag(Rkt))
         Rkt <- ( Rkt + t(Conj(Rkt)) )/2
@@ -390,13 +378,8 @@ U_kls_all[, , , , 1] <- U_kl0[, , , 1:num_freqs]
 Lambdak_l_s <- array(NA, c(d, K, num_freqs, gibbsIts))
 Lambdak_l_s[, , , 1] <- Lambdakl0[, , 1:num_freqs]
 
-#taujk2_s <- array(NA, c(d, K, gibbsIts))
-#taujk2_s[, , 1] <- 1/rgamma(d*K, tau2_a, rate = tau2_b)
 taujkl2_s <- array(NA, c(d, K, num_freqs-2, gibbsIts))
 taujkl2_s[, , , 1] <- 1/rgamma(d*k*(num_freqs-2), tau2_a, rate = tau2_b)
-
-# taujk2B_s <- array(NA, c(d, K, gibbsIts))
-# taujk2B_s[, , 1] <- 1/rgamma(d*K, tau2_a, rate = tau2_b)
 
 zetajk2_s <- array(NA, c(d, K, gibbsIts))
 zetajk2_s[, , 1] <- 1/rgamma(d*K, tau2_a, rate = tau2_b)
@@ -442,15 +425,9 @@ if (useMclapply) {
 # function for mclapply ---------------------------------------------------
 
 ksampler <- function(k) {
-# for (k in 1:K) {       
-    # thisLambda <- array(NA, c(d, num_freqs))
     thisLambda <- result_Lambdas[, k, ]
     thisUkl <- U_kls[, , k, ]
     thisAccCount <- rep(TRUE, num_freqs)
-    
-    # thisTaujkl2 <- taujkl2_s[, k, , s-1]
-    # thisZetajk2 <- zetajk2_s[, k, s-1]
-    # thisSigmak2 <- sigmak2_s[k, s-1]
 
     thisTaujkl2 <- result_taujkl2[, k, ]
     thisZetajk2 <- result_zetajk2[, k]
@@ -460,7 +437,6 @@ ksampler <- function(k) {
     
     ### Lambda: 1st frequency
     LSkw <- data_list_w[[1]][[k]]
-    # Ukl <- U_kls[, , k, 1]
     Ukl <- thisUkl[, , 1]
     
     # for each Lambdak value, j
@@ -470,18 +446,14 @@ ksampler <- function(k) {
         # (take the Real part, since the quadratic form should be real, 
         # but may have a small complex part due to numerical issues.)
         tjk <- Re( t(Conj(Ukl[, j])) %*% LSkw %*% Ukl[, j] ) / 
-            #sigmakl2_s[k, 1, s-1]
             thisSigmak2
         
         ##### sample from a truncated Gamma distribution
         # lower and upper bounds for truncating the Gamma distribution
-        # if (j == 1) lb <- 0 else lb <- 1 / (result_Lambdas[j-1, k, 1] + 1)
-        # if (j == d) ub <- 1 else ub <- 1 / (result_Lambdas[j+1, k, 1] + 1)
         if (j == 1) lb <- 0 else lb <- 1 / (thisLambda[j-1, 1] + 1)
         if (j == d) ub <- 1 else ub <- 1 / (thisLambda[j+1, 1] + 1)
         
         # by slice sampling, instead
-        # xi_jk <- uni.slice(1/(1 + result_Lambdas[j, k, 1]),
         xi_jk <- uni.slice(1/(1 + thisLambda[j, 1]),
                            dgamma,
                            w = 1, m = Inf, lower = lb, upper = ub,
@@ -489,28 +461,23 @@ ksampler <- function(k) {
                            log = TRUE)
         
         # convert xi to Lambda
-        # result_Lambdas[j, k, 1] <- 1/xi_jk - 1
         thisLambda[j, 1] <- 1/xi_jk - 1
     } # end of l = 1 Lambda sampling
     
     ### Lambda: frequencies in 2 to num_freqs-1
     if (Lambda_prior %in% c("1RW", "2RWPN")) {
         for ( l in sample(2:(num_freqs-1)) ) {
-            # Ukw <- U_kls[, , k, l]
             Ukw <- thisUkl[, , l]
             Dkw1 <- data_list_w[[l]][[k]]
             
             for (j in sample(d)) {
                 ajk <- t(Conj(Ukw[, j])) %*% Dkw1 %*% Ukw[, j] / 
-                    # sigmakl2_s[k, l, s-1]
                     thisSigmak2
                 # should be strictly real
                 ajk <- Re(ajk)
                 
                 if (Lambda_prior == "2RWPN") {
                     # 2nd order RW, previous and next neighbors
-                    # lp <- result_Lambdas[j, k, l-1]
-                    # ln <- result_Lambdas[j, k, l+1]
                     lp <- thisLambda[j, l-1]
                     ln <- thisLambda[j, l+1]
                     mu <- (lp + ln)/2
@@ -518,7 +485,6 @@ ksampler <- function(k) {
                 
                 else if (Lambda_prior == "1RW") {
                     # 1st order RW
-                    # mu <- result_Lambdas[j, k, l-1]
                     mu <- thisLambda[j, l-1]
                 }
                 
@@ -541,20 +507,17 @@ ksampler <- function(k) {
     } # end of the conditional to check the type of prior for Lambda
     
     ### Lambda: last frequency
-    # Uw1 <- U_kls[, , k, num_freqs]
     Uw1 <- thisUkl[, , num_freqs]
     Dkw1 <- data_list_w[[num_freqs]][[k]]
     
     for (j in sample(d)) {
         ajk <- t(Conj(Uw1[, j])) %*% Dkw1 %*% Uw1[, j] / 
-            # sigmakl2_s[k, num_freqs, s-1]
             thisSigmak2
         # should be strictly real - this is done in the existing Lambda
         # FCD sampler.
         ajk <- Re(ajk)
         
         # 1st order random walk
-        # mu <- result_Lambdas[j, k, num_freqs - 1]
         mu <- thisLambda[j, num_freqs - 1]
         
         # by slice sampling, instead
@@ -564,7 +527,6 @@ ksampler <- function(k) {
                              tau2 = thisZetajk2[j],
                              ajk = ajk, mu = mu, N = LL, 
                              logscale = TRUE)    
-        # result_Lambdas[j, k, num_freqs] <- newdraw
         thisLambda[j, num_freqs] <- newdraw
         
     } # end of sampling j in 1:d
@@ -575,8 +537,6 @@ ksampler <- function(k) {
     
     # sample the separate taujk2 and zetajk2 parameters
     for (j in 1:d) {
-        # for (k in 1:K) {
-        
         if (Lambda_prior == "2RWPN") {
             # 2nd order RW, next and previous neighbors
             ### BEGIN STANDARD SAMPLING
@@ -600,23 +560,18 @@ ksampler <- function(k) {
                          thisLambda[j, num_freqs-1])^2
         thisZetajk2[j] <- 1/rgamma(1, tau2_a + .5,
                                        rate = tau2_b + .5*sum_zeta)
-        # }
     }
     
     ##### Ukl sampling    
                 
     if (sample_true_Ukl0) {
-        # U_kls <- U_kl0[, , , 1:num_freqs]
         thisUkl <- U_kl0[, , k, 1:num_freqs]
     } else {
     
     # calculate traces and other terms, for the MH acceptance ratio
     for (l in 1:num_freqs) {
-        # Sigmas <- Sigmal0[, , l]
-        # invSigmas <- invSigmal0[, , l]
         invSigmas <- result_invSigmals[, , l]
         
-        # Us <- U_kls[, , k, l]
         Us <- thisUkl[, , l]
         
         ### MH sampling
@@ -624,12 +579,9 @@ ksampler <- function(k) {
         Up <- Uk_MH_Cayley(Us, tau_Ukl[k, l], doCayleyZeros, CayleyZeroProb)
         # let Skl be the scaled data matrix (i.e. SDM est. at freq. index l)
         Skl <- data_list_w[[l]][[k]]
-        # lambdakl <- result_Lambdas[, k, l]
         lambdakl <- thisLambda[, l]
         Omegakl <- diag(lambdakl / (1 + lambdakl))
         
-        # tracep <- Re(sum(diag( Up %*% Omegakl %*% t(Conj(Up)) %*% Skl )))
-        # traces <- Re(sum(diag( Us %*% Omegakl %*% t(Conj(Us)) %*% Skl )))
         tracep <- Re(sum(Conj(Up) * (Skl %*% Up %*% Omegakl)))
         traces <- Re(sum(Conj(Us) * (Skl %*% Us %*% Omegakl)))
         
@@ -644,11 +596,8 @@ ksampler <- function(k) {
         
         # accept or reject
         if (log(runif(1)) <= logr) {
-            # U_kls[, , k, l] <- Up
             thisUkl[, , l] <- Up
         } else {
-            # U_kls[, , k, l] <- Us
-            # accCount[k, l] <- FALSE
             thisUkl[, , l] <- Us
             thisAccCount[l] <- FALSE
         }
@@ -658,20 +607,15 @@ ksampler <- function(k) {
     } # end of conditional to sample random or true values
     
     ### sigmakl2 sampling
-
     par1 <- num_freqs*P*LL
     par2 <- 0
     
     for (l in 1:num_freqs) {
         LSkw <- data_list_w[[l]][[k]]
-        
-        # Ukl <- U_kls[, , k, l]
-        # Lambdakl <- diag(result_Lambdas[, k, l])
+
         Ukl <- thisUkl[, , l]
         Lambdakl <- thisLambda[, l]
-        
-        #mat1 <- diag(P) - Ukl %*% 
-            #diag(1/(1/result_Lambdas[, k, l] + 1)) %*% t(Conj(Ukl))
+
         mat1 <- diag(P) - Ukl %*% diag(1/(1/Lambdakl + 1)) %*% t(Conj(Ukl))
         par2 <- par2 + Re(sum(t(mat1) * LSkw))
     }
@@ -696,9 +640,6 @@ ksampler <- function(k) {
         accCount <- array(TRUE, c(K, num_freqs))
         
         ##### Parallel sampling
-        # ksamples <- foreach(k = 1:K) %dopar% {
-
-        #} # end of sampling over 1:K
         if (useMclapply) {
             ksamples <- mclapply(1:K, ksampler, mc.cores = n_cores)
         } else {
@@ -715,10 +656,6 @@ ksampler <- function(k) {
             U_kls[, , k, ] <- ksamples[[k]]$Ukl
             accCount[k, ] <- ksamples[[k]]$accCount
             result_Lambdas[, k, ] <- ksamples[[k]]$Lambdakl
-            
-            # taujkl2_s[, k, , s] <- ksamples[[k]]$taujkl2
-            # zetajk2_s[, k, s] <- ksamples[[k]]$zetajk2
-            # sigmak2_s[k, s] <- ksamples[[k]]$sigmak2
             
             result_taujkl2[, k, ] <- ksamples[[k]]$taujkl2
             result_zetajk2[, k] <- ksamples[[k]]$zetajk2
@@ -741,16 +678,12 @@ ksampler <- function(k) {
         accCount_Sigma <- rep(TRUE, num_freqs)
         
         for (l in 1:num_freqs) {
-        # this_Sigma_result <- foreach(l = 1:num_freqs) %dopar% {
         
             Sigmals <- result_Sigmals[, , l]
             invSigmals <- result_invSigmals[, , l]
             
-            # prop_par_s <- Sigmals + Sigma_add*diag(P)
             prop_par_s <- (Sigmals + Sigma_add*diag(P)) / (1 + Sigma_add)
             
-            # Sigmap <- rFTCW(result_Sigmals[, , l], n_Sig[l], P, TRUE, TRUE)
-            # Sigmap <- rFTCW(prop_par_s, n_Sig[l], P, TRUE, TRUE)
             Sigmap <- tryCatch(
                 rFTCW(prop_par_s, n_Sig[l], P, useEigenR, byCholesky),
                 error = function(e) {
@@ -762,9 +695,6 @@ ksampler <- function(k) {
                 }
             )
             
-            # invSigmap <- solve(Sigmap)
-            
-            # prop_par_p <- Sigmap + Sigma_add*diag(P)
             prop_par_p <- (Sigmap + Sigma_add*diag(P)) / (1 + Sigma_add)
             
             invSigmap <- tryCatch(
@@ -793,13 +723,11 @@ ksampler <- function(k) {
             logdens_num <- -d*K* logdet(Sigmap) - P * sumlog_p - 
                 n_Sig[l] * logdet(prop_par_p) + # Sigmap is the parameter
                 (n_Sig[l] - P) * logdet(Sigmals) - 
-                # P*n_Sig[l] * log( Re(sum(diag( invSigmap %*% Sigmals))) ) 
                 P*n_Sig[l] * log( Re(sum( t(solve(prop_par_p)) * Sigmals )) ) # Sigmap is the parameter
             
             logdens_den <- -d*K* logdet(Sigmals) - P * sumlog_s - 
                 n_Sig[l] * logdet(prop_par_s) + # Sigmals is the parameter
                 (n_Sig[l] - P) * logdet(Sigmap) - 
-                # P*n_Sig[l] * log( Re(sum(diag( invSigmals %*% Sigmap ))) ) 
                 P*n_Sig[l] * log( Re(sum( t(solve(prop_par_s)) * Sigmap )) ) # Sigmals is the parameter
             
             logr <- Re(logdens_num - logdens_den)
@@ -829,7 +757,6 @@ ksampler <- function(k) {
             curr_Ukl_acc_rate <-
                 apply(accCount_s[, , (s - tau_numin + 1):s], c(1, 2), mean)
             
-            # print(tau_Ukl[curr_Ukl_acc_rate == 0])
             if (show_tau_tune_summ) {
                 print(which(curr_Ukl_acc_rate == 0))
             }
@@ -838,8 +765,6 @@ ksampler <- function(k) {
                 tau_Ukl[curr_Ukl_acc_rate >= .45] * 2
             tau_Ukl[curr_Ukl_acc_rate <= .15] <-
                 tau_Ukl[curr_Ukl_acc_rate <= .15] / 4
-            
-            # print(tau_Ukl[curr_Ukl_acc_rate == 0])
             
             if (show_tau_tune_summ) {
                 apply(accCount_s[, , (s - tau_numin + 1):s], c(1, 2), mean) |>
@@ -853,7 +778,6 @@ ksampler <- function(k) {
                 rowMeans(accCount_Sigma_s[, (s - tau_numin + 1):s])
             
             n_Sig[curr_Sigmal_acc_rate >= .45] <- 
-                # pmax(round(n_Sig[curr_Sigmal_acc_rate >= .45] / 4), P+1)
                 pmax(round(n_Sig[curr_Sigmal_acc_rate >= .45] / 4), P)
             n_Sig[curr_Sigmal_acc_rate <= .15] <- 
                 n_Sig[curr_Sigmal_acc_rate <= .15] * 2
@@ -875,346 +799,3 @@ ksampler <- function(k) {
 
 source("testing/time-series-from-SDM/post-sampling-analysis.R", 
        print.eval = TRUE)
-
-# evaluate ----------------------------------------------------------------
-# stopCluster(cl = cluster)
-
-# print(endtime - starttime)
-# 
-# # check the acceptance rates
-# gibbsPostBurn <- round(gibbsIts * burnin):gibbsIts
-# 
-# apply(accCount_s[, , 2:gibbsIts], c(1, 2), mean) |> t() |> summary()
-# apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean) |> t() |> summary()
-# 
-# apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean) |>
-#     as.vector() |> 
-#     quantile(probs = c(0, 0.025, .25, .5, .75, .975, 1))
-# 
-# # check Sigmal acceptance rates
-# rowMeans(accCount_Sigma_s) |> 
-#     quantile(probs = c(0, 0.025, .25, .5, .75, .975, 1))
-# rowMeans(accCount_Sigma_s[, gibbsPostBurn]) |> 
-#     quantile(probs = c(0, 0.025, .25, .5, .75, .975, 1))
-# 
-# # evaluate Lambdas --------------------------------------------------------
-# 
-# upper_q <- apply(Lambdak_l_s[, , , gibbsPostBurn], 
-#                  c(1, 2, 3), quantile, probs = 0.975)
-# lower_q <- apply(Lambdak_l_s[, , , gibbsPostBurn], 
-#                  c(1, 2, 3), quantile, probs = 0.025)
-# # Lambda_means <- apply(Lambdak_l_s, c(1, 2, 3), mean)
-# Lambda_means <- apply(Lambdak_l_s[, , , gibbsPostBurn], c(1, 2, 3), mean)
-# 
-# k <- 1
-# 
-# # compare quantiles and means for all frequencies of k = 2
-# plot(upper_q[1, k, ], type = "l", lty = 2, 
-#      ylim = c(0, max(Lambdakl0[1, k, 1:num_freqs])),
-#      main = paste0("post. mean and true Lambda, k = ", k),
-#      ylab = "Lambda")
-# lines(lower_q[1, k, ], type = "l", lty = 2)
-# lines(Lambda_means[1, k, ])
-# lines(Lambdakl0[1, k, 1:num_freqs], lty = 3)
-# 
-# lines(upper_q[2, k, ], type = "l", lty = 2, col = "red")
-# lines(lower_q[2, k, ], type = "l", lty = 2, , col = "red")
-# lines(Lambda_means[2, k, ], , col = "red")
-# lines(Lambdakl0[2, k, 1:num_freqs], lty = 3, , col = "red")
-# 
-# save_plot_pdf(file.path(result_dir, "post-Lambda-and-true-1.pdf"))
-# 
-# k <- 2
-# 
-# # compare quantiles and means for all frequencies of k = 2
-# plot(upper_q[1, k, ], type = "l", lty = 2, 
-#      # xlim = c(400, 510),
-#      ylim = c(0, max(Lambdakl0[1, k, 1:num_freqs])),
-#      main = paste0("post. mean and true Lambda, k = ", k),
-#      ylab = "Lambda")
-# lines(lower_q[1, k, ], type = "l", lty = 2)
-# lines(Lambda_means[1, k, ])
-# lines(Lambdakl0[1, k, 1:num_freqs], lty = 3)
-# 
-# lines(upper_q[2, k, ], type = "l", lty = 2, col = "red")
-# lines(lower_q[2, k, ], type = "l", lty = 2, , col = "red")
-# lines(Lambda_means[2, k, ], , col = "red")
-# lines(Lambdakl0[2, k, 1:num_freqs], lty = 3, , col = "red")
-# 
-# save_plot_pdf(file.path(result_dir, "post-Lambda-and-true-2.pdf"))
-# 
-# # distances to true Ukl0 for all Ukl --------------------------------------
-# 
-# ds_to_true <- array(NA, c(K, num_freqs))
-# 
-# for (k in 1:K) {
-#     for (l in 1:num_freqs) {
-#         avgUkl <- apply(U_kls_all[, , k, l, gibbsPostBurn],
-#                         c(1, 2), mean)
-#         avgUkl <- avgUkl %*% 
-#             solve( EigenR::Eigen_sqrt( t(Conj(avgUkl)) %*% avgUkl ) )
-#         
-#         ds_to_true[k, l] <- fast_evec_Frob_stat(U_kl0[, , k, l], avgUkl)
-#     }
-# }
-# 
-# summary(as.vector(ds_to_true))
-# quantile(as.vector(ds_to_true), probs = c(0, 0.025, 0.25, 0.5, 0.75, 0.975, 1))
-# sum(ds_to_true >= sqrt(2))
-# which(ds_to_true >= sqrt(2), arr.ind = TRUE)
-# 
-# which(ds_to_true <= .3, arr.ind = TRUE)
-# 
-# which.max(ds_to_true)
-# which.min(ds_to_true)
-# 
-# # distance and trace plot for one Ukl -------------------------------------
-# 
-# k <- 2
-# l <- 396
-# 
-# apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean)[k, l]
-# 
-# avgUkl <- apply(U_kls_all[, , k, l, gibbsPostBurn],
-#                 c(1, 2), mean)
-# avgUkl <- avgUkl %*% solve( EigenR::Eigen_sqrt( t(Conj(avgUkl)) %*% avgUkl ) )
-# print(fast_evec_Frob_stat(U_kl0[, , k, l], avgUkl))
-# 
-# d_to_avgUkl <- rep(NA, gibbsIts)
-# for (s in 1:gibbsIts) {
-#     d_to_avgUkl[s] <- fast_evec_Frob_stat(U_kls_all[, , k, l, s], avgUkl)
-#     # d_to_avgUkl[s] <- fast_evec_Frob_stat(U_kls_all[, , k, l, s], U_kl0[, , k, l])
-# }
-# 
-# plot(d_to_avgUkl, type = "l",
-#      main = paste0("Trace plot, Ukl axis dist. to mean, k = ", k, ", l = ", l),
-#      ylab = "axis Frobenius dist.")
-# save_plot_pdf(file.path(result_dir, 
-#     paste0("post-Ukl-trace-axis-dist-k-", k, "-l-", l, ".pdf")))
-# 
-# evec_Frob_stat(U_kl0[, , k, l], avgUkl, returnMats = TRUE)
-# evec_Frob_stat(avgUkl, U_kl0[, , k, l], returnMats = TRUE)
-# 
-# # evaluate Sigmal ---------------------------------------------------------
-# 
-# quantile(n_Sig, c(0, .025, .25, .5, .75, .975, 1))
-# 
-# l <- 396
-# 
-# # check Sigmal acceptance rates
-# mean(accCount_Sigma_s[l, ])
-# mean(accCount_Sigma_s[l, gibbsPostBurn])
-# 
-# avgSigmal <- apply(Sigmal_s[, , l, gibbsPostBurn], c(1, 2), mean)
-# 
-# d_to_avgSigmal <- rep(NA, gibbsIts)
-# for (s in 1:gibbsIts) {
-#     d_to_avgSigmal[s] <- frob_dist(Sigmal_s[, , l, s], avgSigmal)
-# }
-# 
-# plot(d_to_avgSigmal, type = "l",
-#      main = paste0("Trace plot, Sigmal dist. to mean, l = ", l),
-#      ylab = "Frobenius dist.")
-# save_plot_pdf(file.path(result_dir, 
-#     paste0("post-Sigmal-trace-l-", l, ".pdf")))
-# 
-# par(mfrow = c(2, 2), mar = c(2, 2, 2, 1))
-# for(j in 1:4) {
-#     plot(Re(Sigmal_s[j, j, l, ]), type = "l", 
-#          main = paste0("Trace plot, Sigmal[j,j], l = ", l, ", j = ", j),
-#          xlab = "", ylab = "")
-# }
-# save_plot_pdf(file.path(result_dir, 
-#     paste0("post-Sigmal-diag-trace-l-", l, "-j-", j, ".pdf")))
-# 
-# par(mfrow = c(1, 1), mar = c(5.1, 4.1, 4.1, 2.1))
-# 
-# # how many Sigmal have 0 acceptance rate?
-# sum(rowMeans(accCount_Sigma_s[, gibbsPostBurn]) == 0)
-# # what fraction have 0 acceptance rate?
-# sum(rowMeans(accCount_Sigma_s[, gibbsPostBurn]) == 0) / num_freqs
-# # show the indices of which ones have 0 acceptance rate
-# which(rowMeans(accCount_Sigma_s[, gibbsPostBurn]) == 0)
-# 
-# # smoothing parameter summaries -------------------------------------------
-# 
-# dim(taujkl2_s)
-# dim(taujkl2_s[1, 1, 1, gibbsPostBurn])
-# length(taujkl2_s[1, 1, 1, gibbsPostBurn])
-# length(taujkl2_s[1, 1, round(num_freqs/2), gibbsPostBurn])
-# 
-# plot(taujkl2_s[1, 1, 1, gibbsPostBurn], type = "l")
-# 
-# median(taujkl2_s[1, 1, 1, gibbsPostBurn])
-# 
-# median(taujkl2_s[1, 1, 150, gibbsPostBurn])
-# median(taujkl2_s[2, 1, 150, gibbsPostBurn])
-# 
-# median(taujkl2_s[1, 1, 256, gibbsPostBurn])
-# median(taujkl2_s[1, 1, 350, gibbsPostBurn])
-# 
-# # evaluate sigmak2 -------------------------------------------------------
-# 
-# sigmak02[1]
-# sigmak02[2]
-# 
-# k <- 1
-# sigmak02[k]
-# quantile(sigmak2_s[k, gibbsPostBurn], c(.025, .5, .975))
-# 
-# plot(sigmak2_s[k, ], type = "l",
-#      main = paste0("Trace plot, sigmak2, k = ", k),
-#      ylab = "sigmak2")
-# abline(h = sigmak02[k])
-# save_plot_pdf(file.path(result_dir, paste0("post-sigmak2-k-", k, ".pdf")))
-# 
-# k <- 2
-# sigmak02[k]
-# quantile(sigmak2_s[k, gibbsPostBurn], c(.025, .5, .975))
-# 
-# plot(sigmak2_s[k, ], type = "l",
-#      main = paste0("Trace plot, sigmak2, k = ", k),
-#      ylab = "sigmak2")
-# abline(h = sigmak02[k])
-# save_plot_pdf(file.path(result_dir, paste0("post-sigmak2-k-", k, ".pdf")))
-# 
-# # evaluate full SDM estimates ---------------------------------------------
-# 
-# # sigmakl2 * (Ukl %*% Lambdakl %*% t(Conj(Ukl)) + I_P)
-# posterior_dists <- array(NA, c(K, num_freqs))
-# multitaper_dists <- array(NA, c(K, num_freqs))
-# 
-# post_mean_SDMs <- array(NA, c(P, P, K, num_freqs))
-# 
-# for (k in 1:K) {
-#     for (l in 1:num_freqs) {
-#         thisSDM <- matrix(0 + 0i, P, P)
-#         for (s in gibbsPostBurn) {
-#             thisSDM <- thisSDM + sigmak2_s[k, s] * 
-#                 (U_kls_all[, , k, l, s] %*% diag(Lambdak_l_s[, k, l, s])
-#                  %*% t(Conj(U_kls_all[, , k, l, s])) + diag(P))
-#         }
-#         
-#         thisSDM <- thisSDM / length(gibbsPostBurn)
-#         post_mean_SDMs[, , k, l] <- thisSDM
-#         
-#         # compare distances
-#         posterior_dists[k, l] <- frob_dist(thisSDM, fkTR[, , k, l])
-#         multitaper_dists[k, l] <- frob_dist(data_list_w[[l]][[k]] / LL, 
-#                                       fkTR[, , k, l])
-#     }
-# }
-# 
-# # Root Mean Squared Error
-# sigmak02
-# 
-# cbind(
-#     posterior = rowMeans((posterior_dists/P)^2),
-#     multitaper = rowMeans((multitaper_dists/P)^2),
-#     scaled_post = rowMeans((posterior_dists/P)^2 / sigmak02),
-#     scaled_multi = rowMeans((multitaper_dists/P)^2 / sigmak02)
-# )
-# 
-# # AMSE, posterior
-# rowMeans((posterior_dists/P)^2) |> mean()
-# # AMSE, multitaper
-# rowMeans((multitaper_dists/P)^2) |> mean()
-# # AMSE, scaled posterior
-# rowMeans((posterior_dists/P)^2 / sigmak02) |> mean()
-# # AMSE, scaled multitaper
-# rowMeans((multitaper_dists/P)^2 / sigmak02) |> mean()
-# 
-# for (k in 1:K) {
-#     cat(paste0("\nk = ", k, "\n"))
-#     quantile(as.vector(posterior_dists[k, ]), 
-#              probs = c(0, .025, .5, .975, 1)) |> print()
-#     quantile(as.vector(multitaper_dists[k, ]), 
-#              probs = c(0, .025, .5, .975, 1)) |> print()
-#     
-#     plot(density(as.vector(posterior_dists[k, ]), from = 0), col = 1,
-#          main = paste0("densities of SDM estimate distances, k = ", k),
-#          xlab = "Frob. distance", ylab = "density")
-#     lines(density(as.vector(multitaper_dists[k, ]), from = 0), col = 2)
-#     legend(x = "topright", legend = c("posterior", "multitaper"),
-#            col = c(1, 2), lwd = 2)
-#     
-#     save_plot_pdf(file.path(result_dir, "post-SDM-est-dist-density",
-#                             paste0("post-SDM-est-dist-density-k-", k, ".pdf")))
-# }
-# 
-# k <- 1
-# l <- 75
-# thisSDM <- matrix(0 + 0i, P, P)
-# for (s in gibbsPostBurn) {
-#     thisSDM <- thisSDM + sigmak2_s[k, s] * 
-#         (U_kls_all[, , k, l, s] %*% diag(Lambdak_l_s[, k, l, s])
-#          %*% t(Conj(U_kls_all[, , k, l, s])) + diag(P))
-# }
-# 
-# thisSDM <- thisSDM / length(gibbsPostBurn)
-# 
-# # true SDM
-# Re(diag(fkTR[, , k, l]))
-# # posterior mean
-# Re(diag(thisSDM))
-# # multitaper estimate
-# Re(diag(data_list_w[[l]][[k]]) / LL)
-# 
-# # compare distances
-# frob_dist(thisSDM, fkTR[, , k, l])
-# frob_dist(data_list_w[[l]][[k]] / LL, fkTR[, , k, l])
-# 
-# # compare true, multitaper, and posterior mean SDMs -----------------------
-# 
-# SDMests_df <- data.frame()
-# trueSDM_df <- data.frame()
-# post_ests_df <- data.frame()
-# 
-# for (k in 1:K) {
-#     for (j in 1:P) {
-#         SDMests_df <- rbind(SDMests_df, 
-#                             data.frame(power = Re(SDMests[[k]][j, j, 1:num_freqs]),
-#                                        k = k,
-#                                        j = j,
-#                                        l = 1:num_freqs,
-#                                        datalabel = "multitaper")
-#         )
-#         
-#         trueSDM_df <- rbind(trueSDM_df,
-#                             data.frame(
-#                                 power = Re(fkTR[j, j, k, 1:num_freqs]),
-#                                 k = k,
-#                                 j = j,
-#                                 l = 1:num_freqs,
-#                                 datalabel = "true"
-#                             ))
-#         
-#         post_ests_df <- rbind(post_ests_df,
-#                               data.frame(
-#                                   power = Re(post_mean_SDMs[j, j, k, ]),
-#                                   k = k,
-#                                   j = j,
-#                                   l = 1:num_freqs,
-#                                   datalabel = "post. mean"
-#                               ))
-#     }
-# }
-# 
-# SDMests_df <- dplyr::mutate(SDMests_df, across(c(k, j, datalabel), as.factor))
-# trueSDM_df <- dplyr::mutate(trueSDM_df, across(c(k, j, datalabel), as.factor))
-# post_ests_df <- dplyr::mutate(post_ests_df, across(c(k, j, datalabel), as.factor))
-# 
-# all_df <- rbind(SDMests_df, trueSDM_df, post_ests_df)
-# all_df$datalabel <- factor(all_df$datalabel, 
-#                            levels = c("true", "multitaper", "post. mean"))
-# 
-# for (kk in 1:K) {
-#     plotp <- dplyr::filter(all_df, k == kk) |> 
-#         ggplot(aes(x = l, y = power)) +
-#         geom_line(aes(color = j, linetype = datalabel)) +
-#         ggtitle(paste0("True and est. SDMs, k = ", kk))
-#     print(plotp)
-#     save_plot_pdf(file.path(result_dir, "compare-SDM-powers",
-#                             paste0("compare-SDM-powers-k-", kk, ".pdf")))
-#     
-# }
