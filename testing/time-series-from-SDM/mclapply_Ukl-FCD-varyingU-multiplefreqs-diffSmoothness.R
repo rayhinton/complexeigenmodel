@@ -131,6 +131,26 @@ log_and_print_obj <- function(x) {
     sink()
 }
 
+# check simulation parameters ---------------------------------------------
+
+if (gibbsIts * burnin != round(gibbsIts * burnin)) {
+    stop(paste0("Burn-in proportion (", burnin, 
+                ") must evenly divide the number of iterations (",
+                gibbsIts, ")."))
+}
+
+if ((gibbsIts * burnin) %% num_tau_check != 0) {
+    stop(paste0("Burn-in length (", gibbsIts * burnin,
+                ") must be a multiple of the tau adaptation interval (",
+                num_tau_check, ")."))
+}
+
+if ((gibbsIts * burnin) %% t_thin != 0) {
+    stop(paste0("Burn-in length (", gibbsIts * burnin,
+                ") must be a multiple of the thinning interval (",
+                t_thin, ")."))
+}
+
 # setup -------------------------------------------------------------------
 
 # the parameters file is run above
@@ -158,6 +178,8 @@ dir.create(file.path(result_dir, "SDM-est-coherence-and-phase"),
 # save the parameters file in the results directory, for later reference
 file.copy("testing/time-series-from-SDM/model-simulation-parameters.R", 
     file.path(result_dir, "model-simulation-parameters.R"))
+
+num_samp <- gibbsIts / t_thin
 
 # generate true parameters ------------------------------------------------
 
@@ -372,22 +394,22 @@ save_plot_pdf(file.path(result_dir, "SDM-est-and-true-2.pdf"))
 
 # initialize arrays -------------------------------------------------------
 
-U_kls_all <- array(NA, c(P, d, K, num_freqs, gibbsIts))
+U_kls_all <- array(NA, c(P, d, K, num_freqs, num_samp))
 U_kls_all[, , , , 1] <- U_kl0[, , , 1:num_freqs]
 
-Lambdak_l_s <- array(NA, c(d, K, num_freqs, gibbsIts))
+Lambdak_l_s <- array(NA, c(d, K, num_freqs, num_samp))
 Lambdak_l_s[, , , 1] <- Lambdakl0[, , 1:num_freqs]
 
-taujkl2_s <- array(NA, c(d, K, num_freqs-2, gibbsIts))
+taujkl2_s <- array(NA, c(d, K, num_freqs-2, num_samp))
 taujkl2_s[, , , 1] <- 1/rgamma(d*k*(num_freqs-2), tau2_a, rate = tau2_b)
 
-zetajk2_s <- array(NA, c(d, K, gibbsIts))
+zetajk2_s <- array(NA, c(d, K, num_samp))
 zetajk2_s[, , 1] <- 1/rgamma(d*K, tau2_a, rate = tau2_b)
 
-sigmak2_s <- array(NA, c(K, gibbsIts))
+sigmak2_s <- array(NA, c(K, num_samp))
 sigmak2_s[, 1] <- sigmak02
 
-Sigmal_s <- array(NA_complex_, c(P, P, num_freqs, gibbsIts))
+Sigmal_s <- array(NA_complex_, c(P, P, num_freqs, num_samp))
 
 if (use_Id_Sigmal_init) {
     Sigmal_s[, , , 1] <- array(diag(P), c(P, P, num_freqs))
@@ -414,6 +436,7 @@ result_Lambdas <- Lambdak_l_s[, , , 1]
 result_taujkl2 <- taujkl2_s[, , , 1]
 result_zetajk2 <- zetajk2_s[, , 1]
 result_sigmak2 <- sigmak2_s[, 1]
+# result_Sigmals is set above
 
 # parallel ----------------------------------------------------------------
 
@@ -661,15 +684,8 @@ ksampler <- function(k) {
             result_zetajk2[, k] <- ksamples[[k]]$zetajk2
             result_sigmak2[k] <- ksamples[[k]]$sigmak2
         }
-            
-        # save this iteration into sampler-level arrays
-        U_kls_all[, , , , s] <- U_kls
-        accCount_s[, , s] <- accCount
-        Lambdak_l_s[, , , s] <- result_Lambdas
         
-        taujkl2_s[, , , s] <- result_taujkl2
-        zetajk2_s[, , s] <- result_zetajk2
-        sigmak2_s[, s] <- result_sigmak2
+        accCount_s[, , s] <- accCount    
         
         ###
         # Sigmal sampling
@@ -745,10 +761,21 @@ ksampler <- function(k) {
             }
         } # end of frequencies for Sigmal sampling
         
-        Sigmal_s[, , , s] <- result_Sigmals
         accCount_Sigma_s[, s] <- accCount_Sigma
         
         ### end of Sigmal sampling
+        
+        ### save thinned samples
+        if ((s-1) %% t_thin == 0) {    
+            # save this iteration into sampler-level arrays
+            s_thin <- ceiling(s / t_thin)
+            U_kls_all[, , , , s_thin] <- U_kls
+            Lambdak_l_s[, , , s_thin] <- result_Lambdas
+            taujkl2_s[, , , s_thin] <- result_taujkl2
+            zetajk2_s[, , s_thin] <- result_zetajk2
+            sigmak2_s[, s_thin] <- result_sigmak2
+            Sigmal_s[, , , s_thin] <- result_Sigmals
+        }
         
         ### do adaptation of the Ukl MH tuning parameter
         if (s %in% tau_s_check) {

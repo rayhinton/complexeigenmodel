@@ -29,6 +29,7 @@ all_same_VAR_pars <- TRUE
 Lambda_prior <- "2RWPN"
 
 gibbsIts <- 5000
+t_thin <- 10
 burnin <- 0.5
 gibbsPrint <- 100
 
@@ -58,7 +59,7 @@ CayleyZeroProb <- 0.5
 
 ### Sigmal MH tuning parameters
 n_Sig <- rep(max(50, P*2), num_freqs)
-Sigma_add <- 0.001
+Sigma_add <- 1e-13
 useEigenR <- TRUE 
 byCholesky <- TRUE
 

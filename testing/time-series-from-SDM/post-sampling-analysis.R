@@ -9,14 +9,16 @@ catout <- function(printtext) {
 print(endtime - starttime)
 
 # check the acceptance rates
-gibbsPostBurn <- round(gibbsIts * burnin):gibbsIts
+# gibbsPostBurn <- round(gibbsIts * burnin):gibbsIts
+gibbsPostBurn <- (gibbsIts*burnin / t_thin + 1):num_samp
+acc_rate_PostBurn <- (gibbsIts * burnin):gibbsIts
 
 catout("sample-wise summary of Ukl acc. rates, all and post burn-in")
 apply(accCount_s[, , 2:gibbsIts], c(1, 2), mean) |> t() |> summary()
-apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean) |> t() |> summary()
+apply(accCount_s[, , acc_rate_PostBurn], c(1, 2), mean) |> t() |> summary()
 
 catout("overall summary of Ukl acc. rates, post burn-in")
-apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean) |>
+apply(accCount_s[, , acc_rate_PostBurn], c(1, 2), mean) |>
     as.vector() |> 
     quantile(probs = c(0, 0.025, .25, .5, .75, .975, 1))
 
@@ -24,7 +26,7 @@ apply(accCount_s[, , gibbsPostBurn], c(1, 2), mean) |>
 catout("Sigmal acc. rates, all and post burn-in")
 rowMeans(accCount_Sigma_s) |> 
     quantile(probs = c(0, 0.025, .25, .5, .75, .975, 1))
-rowMeans(accCount_Sigma_s[, gibbsPostBurn]) |> 
+rowMeans(accCount_Sigma_s[, acc_rate_PostBurn]) |> 
     quantile(probs = c(0, 0.025, .25, .5, .75, .975, 1))
 
 # evaluate Lambdas --------------------------------------------------------
@@ -99,7 +101,7 @@ save_plot_pdf(file.path(result_dir,
 
 # calculate distances and plot ESS for all k and l ------------------------
 
-all_Ukl_dists <- array(NA, c(K, num_freqs, gibbsIts))
+all_Ukl_dists <- array(NA, c(K, num_freqs, num_samp))
 ESS_Ukl_dists <- array(NA, c(K, num_freqs))
 
 for (k in 1:K) {
@@ -108,7 +110,7 @@ for (k in 1:K) {
                         c(1, 2), mean)
         avgUkl <- avgUkl %*% solve(EigenR::Eigen_sqrt(t(Conj(avgUkl)) %*% 
                                                           avgUkl))
-        for (s in 1:gibbsIts) {
+        for (s in 1:num_samp) {
             all_Ukl_dists[k, l, s] <- 
                 fast_evec_Frob_stat(U_kls_all[, , k, l, s], avgUkl)
         }
@@ -174,8 +176,8 @@ mean(accCount_Sigma_s[l, gibbsPostBurn])
 
 avgSigmal <- apply(Sigmal_s[, , l, gibbsPostBurn], c(1, 2), mean)
 
-d_to_avgSigmal <- rep(NA, gibbsIts)
-for (s in 1:gibbsIts) {
+d_to_avgSigmal <- rep(NA, num_samp)
+for (s in 1:num_samp) {
     d_to_avgSigmal[s] <- frob_dist(Sigmal_s[, , l, s], avgSigmal)
 }
 
@@ -435,8 +437,8 @@ for (k in 1:K) {
 # plot likelihood of data -------------------------------------------------
 
 calc_logLikeliS <- function (k) {
-    logLikeliS <- rep(NA, gibbsIts)
-    for (s in 1:gibbsIts) {
+    logLikeliS <- rep(NA, num_samp)
+    for (s in 1:num_samp) {
         lsum <- 0
         for (l in 1:num_freqs) {
             Omegakl <- diag(1 / ( 1/Lambdak_l_s[, k, l, s] + 1 ))
@@ -470,15 +472,15 @@ registerDoParallel(cluster)
 all_logLike <- mclapply(1:K, calc_logLikeliS, mc.cores = n_cores)
 # all_logLike <- lapply(1:5, calc_logLikeliS)
 
-total_logLike <- rep(0, gibbsIts)
+total_logLike <- rep(0, num_samp)
 
-for (s in 1:gibbsIts) {
+for (s in 1:num_samp) {
     for (k in 1:K) {
         total_logLike[s] <- total_logLike[s] + Re(all_logLike[[k]][s])
     }
 }
 
-data.frame(index = 1:gibbsIts, logLike = total_logLike) |> 
+data.frame(index = 1:num_samp, logLike = total_logLike) |> 
     ggplot(aes(x = index, y = logLike)) + 
     geom_line() +
     labs(y = "log likelihood", title = "log likelihood trace plot",
