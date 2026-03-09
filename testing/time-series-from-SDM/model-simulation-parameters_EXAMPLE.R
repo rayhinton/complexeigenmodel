@@ -51,7 +51,11 @@ m <- 2
 ### Ukl MH tuning parameters
 # tau_Uk <- rep(.1, K)
 tau_Ukl <- array(0.1, c(K, num_freqs))
+
 num_tau_check <- 20
+min_acc_rate <- .2
+max_acc_rate <- .3
+
 show_tau_tune_summ <- FALSE
 show_n_Sig_summary <- FALSE
 doCayleyZeros <- FALSE

@@ -788,10 +788,10 @@ ksampler <- function(k) {
                 print(which(curr_Ukl_acc_rate == 0))
             }
             
-            tau_Ukl[curr_Ukl_acc_rate >= .45] <-
-                tau_Ukl[curr_Ukl_acc_rate >= .45] * 2
-            tau_Ukl[curr_Ukl_acc_rate <= .15] <-
-                tau_Ukl[curr_Ukl_acc_rate <= .15] / 4
+            tau_Ukl[curr_Ukl_acc_rate >= max_acc_rate] <-
+                tau_Ukl[curr_Ukl_acc_rate >= max_acc_rate] * 2
+            tau_Ukl[curr_Ukl_acc_rate <= min_acc_rate] <-
+                tau_Ukl[curr_Ukl_acc_rate <= min_acc_rate] / 4
             
             if (show_tau_tune_summ) {
                 apply(accCount_s[, , (s - tau_numin + 1):s], c(1, 2), mean) |>
@@ -804,10 +804,10 @@ ksampler <- function(k) {
             curr_Sigmal_acc_rate <- 
                 rowMeans(accCount_Sigma_s[, (s - tau_numin + 1):s])
             
-            n_Sig[curr_Sigmal_acc_rate >= .45] <- 
-                pmax(round(n_Sig[curr_Sigmal_acc_rate >= .45] / 4), P)
-            n_Sig[curr_Sigmal_acc_rate <= .15] <- 
-                n_Sig[curr_Sigmal_acc_rate <= .15] * 2
+            n_Sig[curr_Sigmal_acc_rate >= max_acc_rate] <- 
+                pmax(round(n_Sig[curr_Sigmal_acc_rate >= max_acc_rate] / 4), P)
+            n_Sig[curr_Sigmal_acc_rate <= min_acc_rate] <- 
+                n_Sig[curr_Sigmal_acc_rate <= min_acc_rate] * 2
             
             if (show_n_Sig_summary) {
                 print("Summary of n_Sig tuning par.:")
