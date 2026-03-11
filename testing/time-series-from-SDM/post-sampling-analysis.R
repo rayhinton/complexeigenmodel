@@ -247,25 +247,56 @@ save_plot_pdf(file.path(result_dir, paste0("post-sigmak2-k-", k, ".pdf")))
 # sigmakl2 * (Ukl %*% Lambdakl %*% t(Conj(Ukl)) + I_P)
 posterior_dists <- array(NA, c(K, num_freqs))
 multitaper_dists <- array(NA, c(K, num_freqs))
-
 post_mean_SDMs <- array(NA, c(P, P, K, num_freqs))
 
+post_SDMs <- array(NA, c(P, P, K, num_freqs, length(gibbsPostBurn)))
+post_sq_cohe_phase <- data.frame()
+
 for (k in 1:K) {
+    cat(paste0(k, " of ", K, ": post. SDM, sq. coherence, and phase\n"))
+    
+    # calculate individual and posterior mean SDMs
     for (l in 1:num_freqs) {
-        thisSDM <- matrix(0 + 0i, P, P)
+        meanSDM <- matrix(0 + 0i, P, P)
         for (s in gibbsPostBurn) {
-            thisSDM <- thisSDM + sigmak2_s[k, s] * 
+            thisSDM <- sigmak2_s[k, s] * 
                 (U_kls_all[, , k, l, s] %*% diag(Lambdak_l_s[, k, l, s])
                  %*% t(Conj(U_kls_all[, , k, l, s])) + diag(P))
+            
+            t_idx <- s - (gibbsIts*burnin)/t_thin
+            
+            post_SDMs[, , k, l, t_idx] <- thisSDM
+            meanSDM <- meanSDM + thisSDM
         }
         
-        thisSDM <- thisSDM / length(gibbsPostBurn)
-        post_mean_SDMs[, , k, l] <- thisSDM
+        meanSDM <- meanSDM / length(gibbsPostBurn)
+        post_mean_SDMs[, , k, l] <- meanSDM
         
         # compare distances
         posterior_dists[k, l] <- frob_dist(thisSDM, fkTR[, , k, l])
         multitaper_dists[k, l] <- frob_dist(data_list_w[[l]][[k]] / LL, 
-                                      fkTR[, , k, l])
+                                            fkTR[, , k, l])
+        
+        # calculate posterior mean squared coherence and phase
+        theseCohe <- data.frame()
+        for (ir in 1:(P-1)) {
+            for (ic in (ir+1):P) {
+                thisCohe <- mean(Mod(post_SDMs[ir, ic, k, l, ])^2 / 
+                                     (post_SDMs[ir, ir, k, l, ] * 
+                                          post_SDMs[ic, ic, k, l, ]))
+                
+                
+                thisPhase <- mean(Arg(post_SDMs[ir, ic, k, l, ]))
+                
+                theseCohe <- 
+                    rbind(theseCohe,
+                          data.frame(ir = ir, ic = ic, k = k,
+                                     sq_cohe = Re(thisCohe), phase = thisPhase,
+                                     freq_index = l, datalabel = "posterior"))
+            }
+        }
+        
+        post_sq_cohe_phase <- rbind(post_sq_cohe_phase, theseCohe)
     }
 }
 
@@ -370,32 +401,35 @@ for (k in 1:K) {
             true_sq_cohe <- 
                 Re(Mod(fkTR[ir, ic, k, ])^2 /
                        (fkTR[ir, ir, k, ] * fkTR[ic, ic, k, ]))
-            post_sq_cohe <- 
-                Re(Mod(post_mean_SDMs[ir, ic, k, ])^2 / 
-                       (post_mean_SDMs[ir, ir, k, ] * post_mean_SDMs[ic, ic, k, ]))
+            # post_sq_cohe <- 
+            #     Re(Mod(post_mean_SDMs[ir, ic, k, ])^2 / 
+            #            (post_mean_SDMs[ir, ir, k, ] * post_mean_SDMs[ic, ic, k, ]))
             multi_sq_cohe <- 
                 Re(Mod(multi_SDMs[ir, ic, k, ])^2 / 
                        (multi_SDMs[ir, ir, k, ] * multi_SDMs[ic, ic, k, ]))
             
             true_phase <- Arg(fkTR[ir, ic, k, 1:num_freqs])
-            post_phase <- Arg(post_mean_SDMs[ir, ic, k, ])
+            # post_phase <- Arg(post_mean_SDMs[ir, ic, k, ])
             multi_phase <- Arg(multi_SDMs[ir, ic, k, 1:num_freqs])
             
             all_cohe_phase <- 
                 rbind(all_cohe_phase,
                       data.frame(
-                          ir = ir,
-                          ic = ic,
+                          ir = ir, ic = ic, k = k,
                           sq_cohe = c(true_sq_cohe[1:num_freqs], 
-                                      post_sq_cohe[1:num_freqs], 
                                       multi_sq_cohe[1:num_freqs]),
-                          phase = c(true_phase, post_phase, multi_phase),
+                          phase = c(true_phase, multi_phase),
                           freq_index = 1:num_freqs,
-                          datalabel = rep(c("true", "posterior", "multitaper"), 
+                          datalabel = rep(c("true", "multitaper"), 
                                           each = num_freqs))
                 )
         }
     }
+    
+    # combine with the posterior mean coherence and phase calculated earlier
+    all_cohe_phase <- 
+        dplyr::filter(post_sq_cohe_phase, k == k) |> 
+        rbind(all_cohe_phase)
     
     # plot squared coherence
     plot_sq_cohe <- all_cohe_phase |> 
