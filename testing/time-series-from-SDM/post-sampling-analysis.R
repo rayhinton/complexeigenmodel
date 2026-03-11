@@ -428,7 +428,7 @@ for (k in 1:K) {
     
     # combine with the posterior mean coherence and phase calculated earlier
     all_cohe_phase <- 
-        dplyr::filter(post_sq_cohe_phase, k == k) |> 
+        post_sq_cohe_phase[post_sq_cohe_phase$k == k, ] |> 
         rbind(all_cohe_phase)
     
     # plot squared coherence
