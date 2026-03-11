@@ -439,7 +439,10 @@ for (k in 1:K) {
         ggplot2::facet_wrap(vars(ir, ic), scales = "free_y", 
                             strip.position = "left", 
                             labeller = \(x) label_both(x, multi_line = FALSE)) +
-        geom_line(aes(linetype = datalabel), linewidth = .2) +
+        geom_line(aes(linetype = datalabel, color = datalabel), 
+                  linewidth = .2) +
+        scale_color_manual(values = c("true" = "red", "multitaper" = "black", 
+                                      "posterior" = "black")) +
         labs(title = paste0("Estimated squared coherence for k = ", k)) +
         theme(legend.position = c(0, 1), legend.justification = c(0, 1),
               legend.background = element_rect(fill = alpha("white", 0.6)),
@@ -457,7 +460,10 @@ for (k in 1:K) {
         ggplot2::facet_wrap(vars(ir, ic), scales = "free_y", 
                             strip.position = "left", 
                             labeller = \(x) label_both(x, multi_line = FALSE)) +
-        geom_line(aes(linetype = datalabel), linewidth = .2) +
+        geom_line(aes(linetype = datalabel, color = datalabel), 
+                  linewidth = .2) +
+        scale_color_manual(values = c("true" = "red", "multitaper" = "black", 
+                                      "posterior" = "black")) +
         labs(title = paste0("Estimated phase for k = ", k)) +
         theme(legend.position = c(0, 1), legend.justification = c(0, 1),
               legend.background = element_rect(fill = alpha("white", 0.6)),
