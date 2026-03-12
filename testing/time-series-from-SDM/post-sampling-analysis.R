@@ -273,7 +273,7 @@ for (k in 1:K) {
         post_mean_SDMs[, , k, l] <- meanSDM
         
         # compare distances
-        posterior_dists[k, l] <- frob_dist(thisSDM, fkTR[, , k, l])
+        posterior_dists[k, l] <- frob_dist(meanSDM, fkTR[, , k, l])
         multitaper_dists[k, l] <- frob_dist(data_list_w[[l]][[k]] / LL, 
                                             fkTR[, , k, l])
         
