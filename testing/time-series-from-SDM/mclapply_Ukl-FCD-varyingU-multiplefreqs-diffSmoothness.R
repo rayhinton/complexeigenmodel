@@ -16,6 +16,7 @@ source("functions/FCD_Uk_CMACG.R")
 source("functions/rcomplex_wishart.R")
 source("functions/matrix_distances.R")
 source("testing/first-time-series/geoSS.R")
+source("functions/Lambda_sampling.R")
 
 closest_semiorth <- function(U) {
  
@@ -459,131 +460,27 @@ ksampler <- function(k) {
     ##### Lambda sampling
     
     ### Lambda: 1st frequency
-    LSkw <- data_list_w[[1]][[k]]
-    Ukl <- thisUkl[, , 1]
-    
-    # for each Lambdak value, j
-    for (j in sample(d)) {
-        # xi_jk has a truncated Gamma(nk, tjk) distribution (shape, rate), 
-        # and tjk is a temporary parameter defined as follows.
-        # (take the Real part, since the quadratic form should be real, 
-        # but may have a small complex part due to numerical issues.)
-        tjk <- Re( t(Conj(Ukl[, j])) %*% LSkw %*% Ukl[, j] ) / 
-            thisSigmak2
-        
-        ##### sample from a truncated Gamma distribution
-        # lower and upper bounds for truncating the Gamma distribution
-        if (j == 1) lb <- 0 else lb <- 1 / (thisLambda[j-1, 1] + 1)
-        if (j == d) ub <- 1 else ub <- 1 / (thisLambda[j+1, 1] + 1)
-        
-        # by slice sampling, instead
-        xi_jk <- uni.slice(1/(1 + thisLambda[j, 1]),
-                           dgamma,
-                           w = 1, m = Inf, lower = lb, upper = ub,
-                           shape = LL+1, scale = 1/tjk,
-                           log = TRUE)
-        
-        # convert xi to Lambda
-        thisLambda[j, 1] <- 1/xi_jk - 1
-    } # end of l = 1 Lambda sampling
-    
+    thisLambda[, 1] <- 
+        sample_Lambda_first(k, data_list_w, thisUkl, thisSigmak2, thisLambda, 
+                            d, LL, w_ss = 1, m_ss = Inf)
     ### Lambda: frequencies in 2 to num_freqs-1
-    if (Lambda_prior %in% c("1RW", "2RWPN")) {
-        for ( l in sample(2:(num_freqs-1)) ) {
-            Ukw <- thisUkl[, , l]
-            Dkw1 <- data_list_w[[l]][[k]]
-            
-            for (j in sample(d)) {
-                ajk <- t(Conj(Ukw[, j])) %*% Dkw1 %*% Ukw[, j] / 
-                    thisSigmak2
-                # should be strictly real
-                ajk <- Re(ajk)
-                
-                if (Lambda_prior == "2RWPN") {
-                    # 2nd order RW, previous and next neighbors
-                    lp <- thisLambda[j, l-1]
-                    ln <- thisLambda[j, l+1]
-                    mu <- (lp + ln)/2
-                }
-                
-                else if (Lambda_prior == "1RW") {
-                    # 1st order RW
-                    mu <- thisLambda[j, l-1]
-                }
-                
-                # for single smoothing parameter
-                varpar_jkl <- thisTaujkl2[j, l-1]
-                
-                # by slice sampling, instead
-                newdraw <- uni.slice(thisLambda[j, l],
-                                     unnorm_logPDF,
-                                     w = 1, m = Inf, lower = 0, 
-                                     upper = Inf, 
-                                     tau2 = varpar_jkl,
-                                     ajk = ajk, mu = mu, N = LL, 
-                                     logscale = TRUE)    
-                # result_Lambdas[j, k, l] <- newdraw
-                thisLambda[j, l] <- newdraw
-                
-            } # end of sampling j in 1:d
-        } # end of sampling over frequencies
-    } # end of the conditional to check the type of prior for Lambda
-    
+    thisLambda <- 
+        sample_Lambda_interior(k, data_list_w, thisUkl, thisSigmak2, thisLambda,
+                               thisTaujkl2, Lambda_prior, d, LL, num_freqs, 
+                               unnorm_logPDF, w_ss = 1, m_ss = Inf)
     ### Lambda: last frequency
-    Uw1 <- thisUkl[, , num_freqs]
-    Dkw1 <- data_list_w[[num_freqs]][[k]]
-    
-    for (j in sample(d)) {
-        ajk <- t(Conj(Uw1[, j])) %*% Dkw1 %*% Uw1[, j] / 
-            thisSigmak2
-        # should be strictly real - this is done in the existing Lambda
-        # FCD sampler.
-        ajk <- Re(ajk)
-        
-        # 1st order random walk
-        mu <- thisLambda[j, num_freqs - 1]
-        
-        # by slice sampling, instead
-        newdraw <- uni.slice(thisLambda[j, num_freqs], 
-                             unnorm_logPDF,
-                             w = 1, m = Inf, lower = 0, upper = Inf, 
-                             tau2 = thisZetajk2[j],
-                             ajk = ajk, mu = mu, N = LL, 
-                             logscale = TRUE)    
-        thisLambda[j, num_freqs] <- newdraw
-        
-    } # end of sampling j in 1:d
+    thisLambda[, num_freqs] <- 
+        sample_Lambda_last(k, data_list_w, thisUkl, thisSigmak2, thisLambda,
+                           thisZetajk2, d, LL, num_freqs, unnorm_logPDF,
+                           w_ss = 1, m_ss = Inf)
     
     ##### end of Lambda sampling
     
     ##### taujkl2 and zetajk2 sampling
-    
-    # sample the separate taujk2 and zetajk2 parameters
-    for (j in 1:d) {
-        if (Lambda_prior == "2RWPN") {
-            # 2nd order RW, next and previous neighbors
-            ### BEGIN STANDARD SAMPLING
-            sumalljk <- (
-                (thisLambda[j, 2:(num_freqs-1)] -
-                     .5*thisLambda[j, 1:(num_freqs-2)] -
-                     .5*thisLambda[j, 3:(num_freqs)])^2)
-            
-            thisTaujkl2[j, ] <-
-                1/rgamma(length(sumalljk), 
-                         tau2_a + .5,
-                         rate = tau2_b + .5*sumalljk)
-            ### END STANDARD SAMPLING
-        } else {
-            stop(paste0("No sampler implemented for taujkl when Lambda_prior is ", Lambda_prior))
-        }
-        
-        # zetajk2 sampling
-        # based on 1st order random walk for the last Lambda
-        sum_zeta <- (thisLambda[j, num_freqs] - 
-                         thisLambda[j, num_freqs-1])^2
-        thisZetajk2[j] <- 1/rgamma(1, tau2_a + .5,
-                                       rate = tau2_b + .5*sum_zeta)
-    }
+    thisTaujkl2 <- 
+        sample_taujkl2(thisLambda, tau2_a, tau2_b, Lambda_prior, d, num_freqs)
+    thisZetajk2 <-
+        sample_zetajk2(thisLambda, tau2_a, tau2_b, d, num_freqs)
     
     ##### Ukl sampling    
                 
