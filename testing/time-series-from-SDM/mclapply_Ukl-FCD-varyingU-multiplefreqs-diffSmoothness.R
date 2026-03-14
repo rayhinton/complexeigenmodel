@@ -396,19 +396,93 @@ save_plot_pdf(file.path(result_dir, "SDM-est-and-true-2.pdf"))
 # initialize arrays -------------------------------------------------------
 
 U_kls_all <- array(NA, c(P, d, K, num_freqs, num_samp))
-U_kls_all[, , , , 1] <- U_kl0[, , , 1:num_freqs]
-
+sigmak2_s <- array(0, c(K, num_samp))
 Lambdak_l_s <- array(NA, c(d, K, num_freqs, num_samp))
-Lambdak_l_s[, , , 1] <- Lambdakl0[, , 1:num_freqs]
+# to be created later: temporary matrices
+# U_kls, result_sigmak2, result_Lambdas
+# depending on Lambda method:
+# - result_BetaFree, result_tau2
+# - result_taujkl2, result_zetajk2
 
-taujkl2_s <- array(NA, c(d, K, num_freqs-2, num_samp))
-taujkl2_s[, , , 1] <- 1/rgamma(d*k*(num_freqs-2), tau2_a, rate = tau2_b)
+# estimate Ukl and sigmak2 based on the data
+for (k in 1:K) {
+    for (l in 1:num_freqs) {
+        eigenDkl <- eigen(data_list_w[[l]][[k]])
+        U_kls_all[, , k, l, 1] <- eigenDkl$vectors[, 1:d]
+        sigmak2_s[k, 1] <- sigmak2_s[k, 1] +
+            mean(eigenDkl$values[-(1:d)] / LL) / num_freqs
+    }
+}
+# temporary arrays
+U_kls <- U_kls_all[, , , , 1]
+result_sigmak2 <- sigmak2_s[, 1]
 
-zetajk2_s <- array(NA, c(d, K, num_samp))
-zetajk2_s[, , 1] <- 1/rgamma(d*K, tau2_a, rate = tau2_b)
-
-sigmak2_s <- array(NA, c(K, num_samp))
-sigmak2_s[, 1] <- sigmak02
+if (Lambda_method == "bspline") {
+    bs_setup <- setup_bspline(num_freqs, n_knots = Lambda_bs_n_knots, 
+                              degree = Lambda_bs_degree)
+    
+    # initialize Lambda based on data
+    BtB_inv_Bt <- solve(t(bs_setup$B) %*% bs_setup$B, t(bs_setup$B))
+    result_Lambdas <- array(NA, c(d, K, l))
+    result_BetaFree <- vector("list", K)
+    
+    for (k in 1:K) {
+        new_Lambda <- matrix(NA, d, num_freqs)
+        new_BetaFree <- vector("list", d)
+        
+        for (j in 1:d) {
+            lambda_init_j <- numeric(num_freqs)
+            
+            for (l in 1:num_freqs) {
+                Ukw <- U_kls[, , k, l]
+                Dkw1 <- data_list_w[[l]][[k]]
+                # rough estimate: u_j^H (Shat/sigma2) u_j - 1, floored at a 
+                # small positive value
+                raw <- Re(t(Conj(Ukw[, j])) %*% 
+                              (Dkw1 / (LL * result_sigmak2[k])) %*% 
+                              Ukw[, j]) - 1
+                lambda_init_j[l] <- max(raw, 0.01)
+            }
+            new_Lambda[j, ] <- lambda_init_j
+            
+            # Fit B-spline coefficients via least squares on log scale
+            beta_init <- as.numeric(BtB_inv_Bt %*% log(lambda_init_j))
+            new_BetaFree[[j]] <- beta_init[bs_setup$free_idx]
+        }
+        
+        result_Lambdas[, k, ] <- new_Lambda
+        result_BetaFree[[k]] <- new_BetaFree
+    }
+    
+    # assign to the first sample entry
+    Lambdak_l_s[, , , 1] <- result_Lambdas
+    
+    # One-time precomputation of conditional prior structure 
+    # (does not depend on tau2)
+    cond_prior_setup <- 
+        setup_conditional_prior(bs_setup, use_ridge = Lambda_bs_use_ridge)
+    
+    # tau2 smoothing parameter
+    tau2_bs_s <- array(NA, c(d, K, num_samp))
+    tau2_bs_s[, , 1] <- matrix(1, d, K)
+    result_tau2 <- tau2_bs_s[, , 1]
+} else {
+    # Random-walk parameters
+    # initialize Lambda just based on true values
+    Lambdak_l_s[, , , 1] <- Lambdakl0[, , 1:num_freqs]
+    result_Lambdas <- Lambdak_l_s[, , , 1]
+    
+    # initialize taujkl2 and zetajk2 based on their priors
+    taujkl2_s <- array(NA, c(d, K, num_freqs-2, num_samp))
+    taujkl2_s[, , , 1] <- 1/rgamma(d*k*(num_freqs-2), tau2_a, rate = tau2_b)
+    
+    zetajk2_s <- array(NA, c(d, K, num_samp))
+    zetajk2_s[, , 1] <- 1/rgamma(d*K, tau2_a, rate = tau2_b)
+    
+    # temporary arrays
+    result_taujkl2 <- taujkl2_s[, , , 1]
+    result_zetajk2 <- zetajk2_s[, , 1]
+}
 
 Sigmal_s <- array(NA_complex_, c(P, P, num_freqs, num_samp))
 
@@ -432,11 +506,6 @@ accCount_Sigma_s <- array(NA, c(num_freqs, gibbsIts))
 accCount_Sigma_s[, 1] <- TRUE
 
 # temporary matrices with the first samples
-U_kls <- U_kls_all[, , , , 1]
-result_Lambdas <- Lambdak_l_s[, , , 1]
-result_taujkl2 <- taujkl2_s[, , , 1]
-result_zetajk2 <- zetajk2_s[, , 1]
-result_sigmak2 <- sigmak2_s[, 1]
 # result_Sigmals is set above
 
 # parallel ----------------------------------------------------------------
@@ -452,35 +521,55 @@ ksampler <- function(k) {
     thisLambda <- result_Lambdas[, k, ]
     thisUkl <- U_kls[, , k, ]
     thisAccCount <- rep(TRUE, num_freqs)
-
-    thisTaujkl2 <- result_taujkl2[, k, ]
-    thisZetajk2 <- result_zetajk2[, k]
     thisSigmak2 <- result_sigmak2[k]
+
+    if (Lambda_method == "bspline") {
+        thisTau2 <- result_tau2[, k]
+        thisBetaFree <- result_BetaFree[[k]]
+    } else {
+        thisTaujkl2 <- result_taujkl2[, k, ]
+        thisZetajk2 <- result_zetajk2[, k]
+    }
 
     ##### Lambda sampling
     
     ### Lambda: 1st frequency
-    thisLambda[, 1] <- 
-        sample_Lambda_first(k, data_list_w, thisUkl, thisSigmak2, thisLambda, 
-                            d, LL, w_ss = 1, m_ss = Inf)
-    ### Lambda: frequencies in 2 to num_freqs-1
-    thisLambda <- 
-        sample_Lambda_interior(k, data_list_w, thisUkl, thisSigmak2, thisLambda,
-                               thisTaujkl2, Lambda_prior, d, LL, num_freqs, 
-                               unnorm_logPDF, w_ss = 1, m_ss = Inf)
-    ### Lambda: last frequency
-    thisLambda[, num_freqs] <- 
-        sample_Lambda_last(k, data_list_w, thisUkl, thisSigmak2, thisLambda,
-                           thisZetajk2, d, LL, num_freqs, unnorm_logPDF,
-                           w_ss = 1, m_ss = Inf)
+    thisLambda[, 1] <- sample_Lambda_first(
+        k, data_list_w, thisUkl, thisSigmak2, thisLambda, 
+        d, LL, w_ss = 1, m_ss = Inf)
     
-    ##### end of Lambda sampling
-    
-    ##### taujkl2 and zetajk2 sampling
-    thisTaujkl2 <- 
-        sample_taujkl2(thisLambda, tau2_a, tau2_b, Lambda_prior, d, num_freqs)
-    thisZetajk2 <-
-        sample_zetajk2(thisLambda, tau2_a, tau2_b, d, num_freqs)
+    if (Lambda_method == "bspline") {
+        # Interior + last frequencies via B-spline ESS
+        bspline_result <- sample_Lambda_bspline(
+            k, data_list_w, thisUkl, thisSigmak2, thisLambda, 
+            thisBetaFree, thisTau2, bs_setup, cond_prior_setup,
+            d, LL, num_freqs)
+        
+        thisLambda[, 2:num_freqs] <- bspline_result$Lambda[, 2:num_freqs]
+        thisBetaFree <- bspline_result$BetaFree
+        
+        # Smoothing parameter: single tau2 per j
+        new_tau2 <- sample_tau2_bspline(
+            bspline_result$BetaFull, bs_setup,
+            tau2_a, tau2_b, d, use_ridge = Lambda_bs_use_ridge)
+    } else {
+        # Lambda: frequencies in 2 to num_freqs-1
+        thisLambda <- sample_Lambda_interior(
+            k, data_list_w, thisUkl, thisSigmak2, 
+            thisLambda, thisTaujkl2, Lambda_prior, d, 
+            LL, num_freqs, unnorm_logPDF, w_ss = 1, m_ss = Inf)
+        # Lambda: last frequency
+        thisLambda[, num_freqs] <- sample_Lambda_last(
+            k, data_list_w, thisUkl, thisSigmak2, thisLambda,
+            thisZetajk2, d, LL, num_freqs, unnorm_logPDF, w_ss = 1, m_ss = Inf)
+        
+        # taujkl2 and zetajk2 sampling
+        thisTaujkl2 <- sample_taujkl2(
+            thisLambda, tau2_a, tau2_b, Lambda_prior, d, num_freqs)
+        thisZetajk2 <- sample_zetajk2(
+            thisLambda, tau2_a, tau2_b, d, num_freqs)
+    }
+
     
     ##### Ukl sampling    
                 
@@ -543,11 +632,19 @@ ksampler <- function(k) {
     
     ### end of sigmakl2 sampling
     
-    # return this value for the dopar for loop
-    list(Lambdakl = thisLambda, 
-         taujkl2 = thisTaujkl2, zetajk2 = thisZetajk2,
-         Ukl = thisUkl, accCount = thisAccCount,
-         sigmak2 = thisSigmak2)
+    # return different list components depending on whether the Lambda method is
+    # B-spline or not.
+    if (Lambda_method == "bspline") {
+        list(Lambdakl = thisLambda, 
+             tau2 = thisTau2, BetaFree = thisBetaFree,
+             Ukl = thisUkl, accCount = thisAccCount,
+             sigmak2 = thisSigmak2)
+    } else {
+        list(Lambdakl = thisLambda, 
+             taujkl2 = thisTaujkl2, zetajk2 = thisZetajk2,
+             Ukl = thisUkl, accCount = thisAccCount,
+             sigmak2 = thisSigmak2)
+    }
 } # end of ksampler function
 
 # sampling ----------------------------------------------------------------
@@ -573,13 +670,20 @@ ksampler <- function(k) {
                 stop(paste0("ksampler failed for k=", k, ": ", ksamples[[k]]))
             }
             
+            # extract the samples in a different way, depending on whether
+            # Lambda_method is B-spline or not.
             U_kls[, , k, ] <- ksamples[[k]]$Ukl
             accCount[k, ] <- ksamples[[k]]$accCount
+            result_sigmak2[k] <- ksamples[[k]]$sigmak2
             result_Lambdas[, k, ] <- ksamples[[k]]$Lambdakl
             
-            result_taujkl2[, k, ] <- ksamples[[k]]$taujkl2
-            result_zetajk2[, k] <- ksamples[[k]]$zetajk2
-            result_sigmak2[k] <- ksamples[[k]]$sigmak2
+            if (Lambda_method == "bspline") {
+                result_tau2[, k] <- ksamples[[k]]$tau2
+                result_BetaFree[[k]] <- ksamples[[k]]$BetaFree
+            } else {
+                result_taujkl2[, k, ] <- ksamples[[k]]$taujkl2
+                result_zetajk2[, k] <- ksamples[[k]]$zetajk2
+            }
         }
         
         accCount_s[, , s] <- accCount    
@@ -663,15 +767,21 @@ ksampler <- function(k) {
         ### end of Sigmal sampling
         
         ### save thinned samples
+        # save different hyperparameters depending on Lambda method
         if ((s-1) %% t_thin == 0) {    
             # save this iteration into sampler-level arrays
             s_thin <- ceiling(s / t_thin)
             U_kls_all[, , , , s_thin] <- U_kls
             Lambdak_l_s[, , , s_thin] <- result_Lambdas
-            taujkl2_s[, , , s_thin] <- result_taujkl2
-            zetajk2_s[, , s_thin] <- result_zetajk2
             sigmak2_s[, s_thin] <- result_sigmak2
             Sigmal_s[, , , s_thin] <- result_Sigmals
+            
+            if (Lambda_method == "bspline") {
+                tau2_bs_s[, , s_thin] <- result_tau2
+            } else {
+                taujkl2_s[, , , s_thin] <- result_taujkl2
+                zetajk2_s[, , s_thin] <- result_zetajk2
+            }
         }
         
         ### do adaptation of the Ukl MH tuning parameter

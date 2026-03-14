@@ -207,16 +207,27 @@ sum(rowMeans(accCount_Sigma_s[, gibbsPostBurn]) == 0) / num_freqs
 
 # smoothing parameter summaries -------------------------------------------
 
-plot(taujkl2_s[1, 1, 1, gibbsPostBurn], type = "l")
+if (Lambda_method == "bspline") {
+    catout("median of tau2 samples at some diff j and k")
+    catout("(j, k) = (1, 1) and (2, 1)")
+    median(tau2_bs_s[1, 1, gibbsPostBurn])
+    median(tau2_bs_s[2, 1, gibbsPostBurn])
+    catout("(j, k) = (1, 2) and (2, 2)")
+    median(tau2_bs_s[1, 2, gibbsPostBurn])
+    median(tau2_bs_s[2, 2, gibbsPostBurn])
+} else {
+    plot(taujkl2_s[1, 1, 1, gibbsPostBurn], type = "l")
+    
+    catout("median of taujkl2 samples at some diff j, k, and l")
+    median(taujkl2_s[1, 1, 1, gibbsPostBurn])
+    
+    median(taujkl2_s[1, 1, 150, gibbsPostBurn])
+    median(taujkl2_s[2, 1, 150, gibbsPostBurn])
+    
+    median(taujkl2_s[1, 1, 256, gibbsPostBurn])
+    median(taujkl2_s[1, 1, 350, gibbsPostBurn])    
+}
 
-catout("median of taujkl2 samples at some diff j, k, and l")
-median(taujkl2_s[1, 1, 1, gibbsPostBurn])
-
-median(taujkl2_s[1, 1, 150, gibbsPostBurn])
-median(taujkl2_s[2, 1, 150, gibbsPostBurn])
-
-median(taujkl2_s[1, 1, 256, gibbsPostBurn])
-median(taujkl2_s[1, 1, 350, gibbsPostBurn])
 
 # evaluate sigmak2 -------------------------------------------------------
 

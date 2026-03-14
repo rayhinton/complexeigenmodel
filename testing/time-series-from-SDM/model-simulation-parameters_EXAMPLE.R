@@ -1,4 +1,3 @@
-
 # dataseed <- 21092025
 # dataseed <- 22092025
 # dataseed <- 10102025
@@ -23,10 +22,17 @@ n_cores <- 2
 use_true_SDMs <- FALSE
 use_Id_Sigmal_init <- FALSE
 sample_true_Ukl0 <- FALSE
-all_same_VAR_pars <- TRUE
+all_same_VAR_pars <- FALSE
 
-# options include: 1RW, 2RWPN
+# options include: bspline, RW
+Lambda_method <- "bspline"
+# Random walk options include: 1RW, 2RWPN
 Lambda_prior <- "2RWPN"
+
+# Lambda B-spline prior options
+Lambda_bs_n_knots <- 25
+Lambda_bs_degree <- 3
+Lambda_bs_use_ridge <- TRUE
 
 gibbsIts <- 5000
 t_thin <- 10
@@ -49,12 +55,11 @@ w <- 10
 m <- 2
 
 ### Ukl MH tuning parameters
-# tau_Uk <- rep(.1, K)
 tau_Ukl <- array(0.1, c(K, num_freqs))
 
 num_tau_check <- 20
-min_acc_rate <- .2
-max_acc_rate <- .3
+min_acc_rate <- .15
+max_acc_rate <- .45
 
 show_tau_tune_summ <- FALSE
 show_n_Sig_summary <- FALSE
