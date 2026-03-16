@@ -184,6 +184,8 @@ num_samp <- gibbsIts / t_thin
 
 # generate true parameters ------------------------------------------------
 
+w_ss_tune <- array(1, c(d, K, num_freqs))
+
 set.seed(parseed)
 
 # sigmak02, scale parameter
@@ -534,9 +536,10 @@ ksampler <- function(k) {
     ##### Lambda sampling
     
     ### Lambda: 1st frequency
+    # note we do not specify w_ss, which thus uses w_ss tuning by default
     thisLambda[, 1] <- sample_Lambda_first(
         k, data_list_w, thisUkl, thisSigmak2, thisLambda, 
-        d, LL, w_ss = 1, m_ss = Inf)
+        d, LL, w_ss = w_ss_Lambda, m_ss = Inf)
     
     if (Lambda_method == "bspline") {
         # Interior + last frequencies via B-spline ESS
@@ -549,19 +552,19 @@ ksampler <- function(k) {
         thisBetaFree <- bspline_result$BetaFree
         
         # Smoothing parameter: single tau2 per j
-        new_tau2 <- sample_tau2_bspline(
+        thisTau2 <- sample_tau2_bspline(
             bspline_result$BetaFull, bs_setup,
             tau2_a, tau2_b, d, use_ridge = Lambda_bs_use_ridge)
     } else {
         # Lambda: frequencies in 2 to num_freqs-1
         thisLambda <- sample_Lambda_interior(
             k, data_list_w, thisUkl, thisSigmak2, 
-            thisLambda, thisTaujkl2, Lambda_prior, d, 
-            LL, num_freqs, unnorm_logPDF, w_ss = 1, m_ss = Inf)
+            thisLambda, thisTaujkl2, Lambda_prior, 
+            d, LL, num_freqs, unnorm_logPDF, w_ss = w_ss_Lambda, m_ss = Inf)
         # Lambda: last frequency
         thisLambda[, num_freqs] <- sample_Lambda_last(
-            k, data_list_w, thisUkl, thisSigmak2, thisLambda,
-            thisZetajk2, d, LL, num_freqs, unnorm_logPDF, w_ss = 1, m_ss = Inf)
+            k, data_list_w, thisUkl, thisSigmak2, thisLambda, thisZetajk2, 
+            d, LL, num_freqs, unnorm_logPDF, w_ss = w_ss_Lambda, m_ss = Inf)
         
         # taujkl2 and zetajk2 sampling
         thisTaujkl2 <- sample_taujkl2(
@@ -823,6 +826,15 @@ ksampler <- function(k) {
                 print(summary(curr_Sigmal_acc_rate))
             }
             
+            # w tuning for Lambda slice sampling
+            # only start tuning after I have enough samples built up (don't do
+            # it at the very beginning), since we only store the thinned Lambda
+            # samples.
+            if (s_thin >= 25) {
+                w_ss_idx <- s_thin - 24
+                w_ss_tune <- 2*apply(Lambdak_l_s[, , , w_ss_idx:s_thin], 
+                                   c(1, 2, 3), sd)
+            }
         } 
         
     } # end of s, Gibbs sampling

@@ -1,7 +1,8 @@
 # sample_lambda_first
 
+# if w_ss is not specified, then use the tuned values 
 sample_Lambda_first <- function(k, data_list_w, thisUkl, thisSigmak2, 
-                                thisLambda, d, LL, w_ss = 1, m_ss = Inf) {
+                                thisLambda, d, LL, w_ss = NULL, m_ss = Inf) {
     ### Lambda: 1st frequency
     return_Lambda <- thisLambda[, 1]
     LSkw <- data_list_w[[1]][[k]]
@@ -21,6 +22,9 @@ sample_Lambda_first <- function(k, data_list_w, thisUkl, thisSigmak2,
         if (j == 1) lb <- 0 else lb <- 1 / (return_Lambda[j-1] + 1)
         if (j == d) ub <- 1 else ub <- 1 / (return_Lambda[j+1] + 1)
         
+        if (is.null(w_ss)) {
+            w_ss <- w_ss_tune[j, k, 1]
+        }
         # by slice sampling, instead
         xi_jk <- uni.slice(1/(1 + return_Lambda[j]),
                            dgamma,
@@ -39,7 +43,7 @@ sample_Lambda_first <- function(k, data_list_w, thisUkl, thisSigmak2,
 sample_Lambda_interior <- function(k, data_list_w, thisUkl, thisSigmak2, 
                                     thisLambda, thisTaujkl2, Lambda_prior,
                                     d, LL, num_freqs, unnorm_logPDF,
-                                    w_ss = 1, m_ss = Inf) {
+                                    w_ss = NULL, m_ss = Inf) {
     ### Lambda: frequencies in 2 to num_freqs-1
     if (Lambda_prior %in% c("1RW", "2RWPN")) {
         return_Lambda <- thisLambda
@@ -69,6 +73,9 @@ sample_Lambda_interior <- function(k, data_list_w, thisUkl, thisSigmak2,
                 # for single smoothing parameter
                 varpar_jkl <- thisTaujkl2[j, l-1]
                 
+                if (is.null(w_ss)) {
+                    w_ss <- w_ss_tune[j, k, l]
+                }
                 # by slice sampling, instead
                 newdraw <- uni.slice(return_Lambda[j, l],
                                      unnorm_logPDF,
@@ -89,7 +96,7 @@ sample_Lambda_interior <- function(k, data_list_w, thisUkl, thisSigmak2,
 
 sample_Lambda_last <- function(k, data_list_w, thisUkl, thisSigmak2, thisLambda,
                           thisZetajk2, d, LL, num_freqs, unnorm_logPDF,
-                          w_ss = 1, m_ss = Inf) {
+                          w_ss = NULL, m_ss = Inf) {
     ### Lambda: last frequency
     return_Lambda <- thisLambda[, num_freqs]
     Uw1 <- thisUkl[, , num_freqs]
@@ -106,6 +113,9 @@ sample_Lambda_last <- function(k, data_list_w, thisUkl, thisSigmak2, thisLambda,
         mu <- thisLambda[j, num_freqs - 1]
         
         # by slice sampling, instead
+        if (is.null(w_ss)) {
+            w_ss <- w_ss_tune[j, k, num_freqs]
+        }
         newdraw <- uni.slice(return_Lambda[j], 
                              unnorm_logPDF,
                              w = w_ss, m = m_ss, lower = 0, upper = Inf, 

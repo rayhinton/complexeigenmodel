@@ -26,8 +26,11 @@ all_same_VAR_pars <- FALSE
 
 # options include: bspline, RW
 Lambda_method <- "bspline"
+
 # Random walk options include: 1RW, 2RWPN
 Lambda_prior <- "2RWPN"
+# if w_ss is NULL, then tuning will be done on w_ss; otherwise, specify a value.
+w_ss_Lambda <- NULL
 
 # Lambda B-spline prior options
 Lambda_bs_n_knots <- 25

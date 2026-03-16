@@ -56,6 +56,39 @@ for (k in 1:K) {
                 paste0("post-Lambda-and-true-", k, ".pdf")))
 }
 
+Lambda_ESS <- array(NA, c(d, K, num_freqs))
+
+for (j in 1:d) {
+    for (k in 1:K) {
+        for (l in 1:num_freqs) {
+            Lambda_ESS[j, k, l] <- posterior::ess_basic(Lambdak_l_s[j, k, l, gibbsPostBurn])
+        }
+    }
+}
+
+# these are d x num_freqs
+max_Lambda_ESS <- apply(Lambda_ESS, c(1, 3), max)
+min_Lambda_ESS <- apply(Lambda_ESS, c(1, 3), min)
+
+for (j in 1:d) {
+    plot(max_Lambda_ESS[j, ], type = "l", 
+         main = paste0("min and max ESS for Lambda, j = ", j),
+         ylim = c(0, max(max_Lambda_ESS[j, ])),
+         ylab = "ESS")
+    lines(min_Lambda_ESS[j, ], col = "red")
+    
+    save_plot_pdf(file.path(result_dir,
+                            paste0("Lambda-min-max-ESS-j-", j, ".pdf")))
+}
+
+
+# which.max(ds_to_true) |> arrayInd(.dim = dim(ds_to_true))
+which.min(min_Lambda_ESS) |> arrayInd(.dim = dim(min_Lambda_ESS))
+min(min_Lambda_ESS)
+
+plot(Lambdak_l_s[2, 1, 28, ], type = "l")
+plot(Lambdak_l_s[2, 2, 28, ], type = "l")
+
 # distances to true Ukl0 for all Ukl --------------------------------------
 
 ds_to_true <- array(NA, c(K, num_freqs))
@@ -162,6 +195,58 @@ plot(all_Ukl_dists[ind_far_Ukl[1], ind_far_Ukl[2], ],
 save_plot_pdf(file.path(result_dir, 
                         paste0("post-Ukl-trace-furthest-axis-dist-k-", 
                                ind_far_Ukl[1], "-l-", ind_far_Ukl[2], ".pdf")))
+
+# evaluate sampling of individual elements of Ukl -------------------------
+
+Id_Pd <- diag(1, P, d)
+
+std_U_kls_all <- array(NA, c(P, d, K, num_freqs, num_samp))
+
+for (k in 1:K) {
+    for (l in 1:num_freqs) {
+        for (s in 1:num_samp) {
+            newU <- evec_Frob_stat(
+                Id_Pd, U_kls_all[, , k, l, s], returnMats = TRUE)
+            std_U_kls_all[, , k, l, s] <- newU$Yopt
+        }
+    }
+}
+
+# the complex version ends up having a lot of values very close to 0
+ESS_Ukl_real <- apply(Re(std_U_kls_all[, , , , gibbsPostBurn]), 
+                      c(1, 2, 3, 4), posterior::ess_basic)
+max_ESS_Ukl_real <- apply(ESS_Ukl_real, c(4), max)
+min_ESS_Ukl_real <- apply(ESS_Ukl_real, c(4), min)
+med_ESS_Ukl_real <- apply(ESS_Ukl_real, c(4), median)
+
+# aggregate the ESS at each frequency (i.e. over P, d, K)
+summ_ESS_Ukl_real <- data.frame(
+    values = c(max_ESS_Ukl_real, min_ESS_Ukl_real, med_ESS_Ukl_real),
+    stat = rep(c("max", "min", "median"), each = num_freqs),
+    freq_index = rep(1:num_freqs, 3)
+)
+
+summ_ESS_Ukl_real |> 
+    ggplot(aes(x = freq_index, y = values, color = stat)) +
+    geom_line() +
+    labs(x = "freq. index", y = "ESS", 
+         title = "Ukl (real values) ESS aggregated over P, d, K")
+save_plot_pdf(file.path(result_dir, 
+                        paste0("post-Ukl-element-ESS-by-freq.pdf")))
+
+catout("indices of Re(Ukl) with the worse ESS:")
+ind_worst_ReUkl <- which.min(ESS_Ukl_real) |> arrayInd(.dim = dim(ESS_Ukl_real))
+print(ind_worst_ReUkl)
+
+worst_ReUkl <- Re(std_U_kls_all[ind_worst_ReUkl[1], ind_worst_ReUkl[2],
+                            ind_worst_ReUkl[3], ind_worst_ReUkl[4], ])
+
+plot(worst_ReUkl, type = "l",
+     main = paste0("Trace plot of Re(Ukl) with (p, j, k, l) = (",
+                   paste(ind_worst_ReUkl, collapse = ", " ), ")"),
+     xlab = "freq. index", ylab = "ESS")
+save_plot_pdf(file.path(result_dir, 
+                        paste0("post-Ukl-element-worstESS-traceplot.pdf")))
 
 # evaluate Sigmal ---------------------------------------------------------
 
