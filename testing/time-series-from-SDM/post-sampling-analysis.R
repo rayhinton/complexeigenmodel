@@ -4,13 +4,18 @@ catout <- function(printtext) {
     cat(paste0("\n", printtext, "\n"))
 }
 
+ess_prop_rows <- list()
+ess_s_rows <- list()
+
 # check run time and some MH acceptance rate summaries --------------------
 
 print(endtime - starttime)
+sampling_time_sec <- as.numeric(endtime - starttime, units = "secs")
 
 # check the acceptance rates
 # gibbsPostBurn <- round(gibbsIts * burnin):gibbsIts
 gibbsPostBurn <- (gibbsIts*burnin / t_thin + 1):num_samp
+num_post_samp <- length(gibbsPostBurn)
 acc_rate_PostBurn <- (gibbsIts * burnin):gibbsIts
 
 catout("sample-wise summary of Ukl acc. rates, all and post burn-in")
@@ -29,7 +34,7 @@ rowMeans(accCount_Sigma_s) |>
 rowMeans(accCount_Sigma_s[, acc_rate_PostBurn]) |> 
     quantile(probs = c(0, 0.025, .25, .5, .75, .975, 1))
 
-# evaluate Lambdas --------------------------------------------------------
+# evaluate Lambda curve estimates -----------------------------------------
 
 upper_q <- apply(Lambdak_l_s[, , , gibbsPostBurn], 
                  c(1, 2, 3), quantile, probs = 0.975)
@@ -56,6 +61,8 @@ for (k in 1:K) {
                 paste0("post-Lambda-and-true-", k, ".pdf")))
 }
 
+# evaluate Lambda ESS -----------------------------------------------------
+
 Lambda_ESS <- array(NA, c(d, K, num_freqs))
 
 for (j in 1:d) {
@@ -68,17 +75,19 @@ for (j in 1:d) {
 
 # these are d x num_freqs
 max_Lambda_ESS <- apply(Lambda_ESS, c(1, 3), max)
+med_Lambda_ESS <- apply(Lambda_ESS, c(1, 3), median)
 min_Lambda_ESS <- apply(Lambda_ESS, c(1, 3), min)
 
 for (j in 1:d) {
-    plot(max_Lambda_ESS[j, ], type = "l", 
-         main = paste0("min and max ESS for Lambda, j = ", j),
-         ylim = c(0, max(max_Lambda_ESS[j, ])),
-         ylab = "ESS")
-    lines(min_Lambda_ESS[j, ], col = "red")
+    plot(max_Lambda_ESS[j, ] / num_post_samp, type = "l", 
+         main = paste0("min, median, max ESS prop. for Lambda, j = ", j),
+         ylim = c(0, max(max_Lambda_ESS[j, ] / num_post_samp)),
+         ylab = "ESS proportion")
+    lines(med_Lambda_ESS[j, ] / num_post_samp, col = "green")
+    lines(min_Lambda_ESS[j, ] / num_post_samp, col = "red")
     
     save_plot_pdf(file.path(result_dir,
-                            paste0("Lambda-min-max-ESS-j-", j, ".pdf")))
+                            paste0("Lambda-min-med-max-ESS-j-", j, ".pdf")))
 }
 
 
@@ -88,6 +97,12 @@ min(min_Lambda_ESS)
 
 plot(Lambdak_l_s[2, 1, 28, ], type = "l")
 plot(Lambdak_l_s[2, 2, 28, ], type = "l")
+
+# calculate ESS proportion and per second summaries
+ess_prop_rows[["Lambda"]] <- quantile(as.vector(Lambda_ESS) / num_post_samp,
+         probs = c(0, .025, .25, .5, .75, .975, 1))
+ess_s_rows[["Lambda"]] <- quantile(as.vector(Lambda_ESS) / sampling_time_sec, 
+         probs = c(0, .025, .25, .5, .75, .975, 1))
 
 # distances to true Ukl0 for all Ukl --------------------------------------
 
@@ -119,20 +134,21 @@ which.min(ds_to_true) |> arrayInd(.dim = dim(ds_to_true))
 # plot the max and min distances per frequency
 # create a temporary data frame first
 rbind(data.frame(distance = apply(ds_to_true, 2, min), datalabel = "min"),
+      data.frame(distance = apply(ds_to_true, 2, median), datalabel = "median"),
       data.frame(distance = apply(ds_to_true, 2, max), datalabel = "max")) |> 
     # ggplot
-    ggplot(aes(x = rep(1:num_freqs, times = 2), 
+    ggplot(aes(x = rep(1:num_freqs, times = 3), 
                y = distance, color = datalabel)) +
     geom_line() +
     labs(x = "freq. index", y = "axis Frob. dist.", 
-         title = "max. and min. dist. of post. mean Ukl to true Ukl0") +
+         title = "max, median, and min dist. of post. mean Ukl to true Ukl0") +
     theme(legend.position = c(0, 1), legend.justification = c(0, 1),
           legend.background = element_rect(fill = alpha("white", 0.6)))
 
 save_plot_pdf(file.path(result_dir, 
-                        paste0("Ukl-dist-to-true-max-min.pdf")))
+                        paste0("Ukl-dist-to-true-max-median-min.pdf")))
 
-# calculate distances and plot ESS for all k and l ------------------------
+# calculate Ukl distances and plot ESS for all k and l --------------------
 
 all_Ukl_dists <- array(NA, c(K, num_freqs, num_samp))
 ESS_Ukl_dists <- array(NA, c(K, num_freqs))
@@ -153,21 +169,34 @@ for (k in 1:K) {
     }
 }
 
-# plot of min and max ESS at each frequency
+# plot of min, median, and max ESS at each frequency
 # create a temporary data frame first
-rbind(data.frame(ESS = apply(ESS_Ukl_dists, 2, min), datalabel = "min"),
-      data.frame(ESS = apply(ESS_Ukl_dists, 2, max), datalabel = "max")
+rbind(data.frame(ESS = apply(ESS_Ukl_dists, 2, min) / num_post_samp, 
+                 datalabel = "min"),
+      data.frame(ESS = apply(ESS_Ukl_dists, 2, median) / num_post_samp, 
+                 datalabel = "median"),
+      data.frame(ESS = apply(ESS_Ukl_dists, 2, max) / num_post_samp, 
+                 datalabel = "max")
       ) |> 
     # ggplot
-    ggplot(aes(x = rep(1:num_freqs, times = 2), 
+    ggplot(aes(x = rep(1:num_freqs, times = 3), 
                y = ESS, color = datalabel)) +
     geom_line() +
-    labs(x = "freq. index", title = "max. and min. ESS of Ukl dist.") +
+    labs(x = "freq. index", y = "ESS proportion", 
+         title = "max, median, min ESS prop. of Ukl dist.") +
     theme(legend.position = c(0, 1), legend.justification = c(0, 1),
           legend.background = element_rect(fill = alpha("white", 0.6)))
 
 save_plot_pdf(file.path(result_dir, 
                         paste0("Ukl-dist-summary-ESS-max-min.pdf")))
+
+# calculate ESS proportion and per second summaries
+ess_prop_rows[["Ukl_dist"]] <- 
+    quantile(as.vector(ESS_Ukl_dists) / num_post_samp, 
+             probs = c(0, .025, .25, .5, .75, .975, 1))
+ess_s_rows[["Ukl_dist"]] <- 
+        quantile(as.vector(ESS_Ukl_dists) / sampling_time_sec,
+                 probs = c(0, .025, .25, .5, .75, .975, 1))
 
 # create distance summary trace plots for closest and furthest Ukl --------
 
@@ -202,6 +231,8 @@ Id_Pd <- diag(1, P, d)
 
 std_U_kls_all <- array(NA, c(P, d, K, num_freqs, num_samp))
 
+# calculate a standardized Ukl for each sample
+# the new Ukl is the closest to the d columns of PxP Identity
 for (k in 1:K) {
     for (l in 1:num_freqs) {
         for (s in 1:num_samp) {
@@ -226,11 +257,12 @@ summ_ESS_Ukl_real <- data.frame(
     freq_index = rep(1:num_freqs, 3)
 )
 
+# plot ESS per frequency
 summ_ESS_Ukl_real |> 
-    ggplot(aes(x = freq_index, y = values, color = stat)) +
+    ggplot(aes(x = freq_index, y = values/num_post_samp, color = stat)) +
     geom_line() +
-    labs(x = "freq. index", y = "ESS", 
-         title = "Ukl (real values) ESS aggregated over P, d, K")
+    labs(x = "freq. index", y = "ESS proportion", 
+         title = "Ukl (real values) ESS prop. aggregated over P, d, K")
 save_plot_pdf(file.path(result_dir, 
                         paste0("post-Ukl-element-ESS-by-freq.pdf")))
 
@@ -241,12 +273,130 @@ print(ind_worst_ReUkl)
 worst_ReUkl <- Re(std_U_kls_all[ind_worst_ReUkl[1], ind_worst_ReUkl[2],
                             ind_worst_ReUkl[3], ind_worst_ReUkl[4], ])
 
+# trace plot of the entry with worst ESS
 plot(worst_ReUkl, type = "l",
      main = paste0("Trace plot of Re(Ukl) with (p, j, k, l) = (",
                    paste(ind_worst_ReUkl, collapse = ", " ), ")"),
      xlab = "freq. index", ylab = "ESS")
 save_plot_pdf(file.path(result_dir, 
                         paste0("post-Ukl-element-worstESS-traceplot.pdf")))
+
+# calculate ESS proportion and per second summaries
+ess_prop_rows[["Ukl_real"]] <- 
+    quantile(as.vector(ESS_Ukl_real) / num_post_samp, 
+             probs = c(0, .025, .25, .5, .75, .975, 1))
+ess_s_rows[["Ukl_real"]] <- 
+        quantile(as.vector(ESS_Ukl_real) / sampling_time_sec,
+                 probs = c(0, .025, .25, .5, .75, .975, 1))
+
+# evaluating ESS of projection matrices -----------------------------------
+
+Proj_kl_s <- array(NA, c(P, P, K, num_freqs, num_samp))
+
+# calculate each sampled projection matrix
+for (k in 1:K) {
+    for (l in 1:num_freqs) {
+        for (s in 1:num_samp) {
+            Proj_kl_s[, , k, l, s] <- 
+                U_kls_all[, , k, l, s] %*% t(Conj(U_kls_all[, , k, l, s]))
+        }
+    }
+}
+
+# ESS: for each k and l:
+# - one Real for each diagonal entry
+# - one Real for each off-diagonal entry
+# - one Complex for each off-diagonal entry
+Proj_ESS <- matrix(NA, K*num_freqs*(P + 2*choose(P, 2)), 5)
+Proj_Re_or_Im <- rep(NA, K*num_freqs*(P + 2*choose(P, 2)))
+
+plot(Re(Proj_kl_s[1, 1, 1, 1, ]), type = "l")
+
+# calculate ESS for real and complex, diagonal and upper-triangular entries
+rowi <- 1
+for (k in 1:K) {
+    for (l in 1:num_freqs) {
+        for (ii in 1:P) {
+            for (j in (ii):P) {
+                # Complex
+                if (j != ii) {
+                    Proj_ESS[rowi, ] <- c(posterior::ess_basic(
+                        Im(Proj_kl_s[ii, j, k, l, gibbsPostBurn])),
+                        k, l, ii, j)
+                    Proj_Re_or_Im[rowi] <- "Im"
+                    rowi <- rowi + 1
+                }
+                
+                # Real
+                Proj_ESS[rowi, ] <- c(posterior::ess_basic(
+                    Re(Proj_kl_s[ii, j, k, l, gibbsPostBurn])),
+                    k, l, ii, j)
+                Proj_Re_or_Im[rowi] <- "Re"
+                rowi <- rowi + 1
+            }
+        }
+    }
+}
+
+# put together into a data frame
+Proj_ESS <- data.frame(Proj_ESS)
+Proj_ESS$type <- Proj_Re_or_Im
+names(Proj_ESS) <- c("ESS", "k", "l", "p", "j", "type")
+
+# what are the indices of the entry with the worst ESS?
+Proj_ESS |> dplyr::group_by(type) |> dplyr::slice_min(ESS, n = 1)
+
+# save the aggregated min, med, max in long form for easier plotting
+summ_ESS <- Proj_ESS |> 
+    dplyr::summarise(min = min(ESS), median = median(ESS), max = max(ESS),
+                     .by = c(l, type)) |> 
+    tidyr::pivot_longer(cols = !c(l, type),
+                        names_to = "stat",
+                        values_to = "ESS")
+
+# plot ESS by frequency for Real values
+summ_ESS |> 
+    dplyr::filter(type == "Re") |> 
+    ggplot(aes(x = l, y = ESS / num_post_samp, color = stat)) +
+    geom_line() +
+    labs(title = "min, median, max ESS prop. for Real proj. matrix entries",
+         x = "freq. index", y = "ESS proportion")
+
+# plot ESS by frequency for Complex values
+summ_ESS |> 
+    dplyr::filter(type == "Im") |> 
+    ggplot(aes(x = l, y = ESS / num_post_samp, color = stat)) +
+    geom_line() +
+    labs(title = "min, median, max ESS prop. for Complex proj. matrix entries",
+         x = "freq. index", y = "ESS proportion")
+
+# calculate ESS proportion and per second summaries
+ess_prop_rows[["Proj"]] <- quantile(
+    Proj_ESS$ESS / num_post_samp, 
+    probs = c(0, .025, .25, .5, .75, .975, 1))
+ess_s_rows[["Proj"]] <- quantile(
+    Proj_ESS$ESS / sampling_time_sec, 
+    probs = c(0, .025, .25, .5, .75, .975, 1))
+
+# Finding worst combinations of ESS for Projection matrices ---------------
+
+# what are the 25% worst combinations of entries?
+# Proj_ESS_Re |>
+#     dplyr::filter(ESS <= quantile(ESS, 0.25)) |>
+#     dplyr::count(p, j) |> dplyr::arrange(desc(n))
+# Proj_ESS_Im |>
+#     dplyr::filter(ESS <= quantile(ESS, 0.25)) |>
+#     dplyr::count(p, j) |> dplyr::arrange(desc(n))
+# 
+# # what are the 25% worst observations?
+# # I think that this is maybe not as meaningful
+# Proj_ESS_Re |>
+#     dplyr::filter(ESS <= quantile(ESS, 0.25)) |>
+#     dplyr::count(k) |> dplyr::arrange(desc(n))
+# 
+# # a trace plot of one projection matrix entry
+# plot(Re(Proj_kl_s[3, 4, 10, 224, ]), type = "l")
+# plot(Im(Proj_kl_s[3, 4, 8, 259, ]), type = "l")
 
 # evaluate Sigmal ---------------------------------------------------------
 
@@ -290,6 +440,71 @@ sum(rowMeans(accCount_Sigma_s[, gibbsPostBurn]) == 0) / num_freqs
 # show the indices of which ones have 0 acceptance rate
 # which(rowMeans(accCount_Sigma_s[, gibbsPostBurn]) == 0)
 
+# Evaluate Sigmal ESS -----------------------------------------------------
+
+Sigmal_ESS <- matrix(NA, num_freqs*(P + 2*choose(P, 2)), 4)
+Sigmal_Re_or_Im <- rep(NA, num_freqs*(P + 2*choose(P, 2)))
+
+# calculate ESS for real and complex, diagonal and upper-triangular entries
+rowi <- 1
+for (l in 1:num_freqs) {
+    for (ii in 1:P) {
+        for (j in (ii):P) {
+            if (j != ii) {
+                Sigmal_ESS[rowi, ] <- c(
+                    posterior::ess_basic(Im(Sigmal_s[ii, j, l, gibbsPostBurn])),
+                    l, ii, j)
+                Sigmal_Re_or_Im[rowi] <- "Im"
+                rowi <- rowi + 1
+            }
+            
+            Sigmal_ESS[rowi, ] <- c( 
+                posterior::ess_basic(Re(Sigmal_s[ii, j, l, gibbsPostBurn])),
+                l, ii, j)
+            Sigmal_Re_or_Im[rowi] <- "Re"
+            rowi <- rowi + 1
+        }
+    }
+}
+
+# put into data frame
+Sigmal_ESS <- cbind(data.frame(Sigmal_ESS), Sigmal_Re_or_Im)
+names(Sigmal_ESS) <- c("ESS", "l", "p", "j", "type")
+
+Sigmal_ESS |> dplyr::group_by(type) |> dplyr::slice_min(ESS, n = 1)
+
+# summarize min, max, median ESS in a long form for easier plotting
+summ_Sigmal_ESS <- Sigmal_ESS |>  
+    dplyr::summarise(min = min(ESS), median = median(ESS), max = max(ESS),
+                     .by = c(l, type)) |>
+    tidyr::pivot_longer(cols = !c(l, type),
+                        names_to = "stat",
+                        values_to = "ESS")
+
+# plot ESS for Real values
+summ_Sigmal_ESS |> 
+    dplyr::filter(type == "Re") |> 
+    ggplot(aes(x = l, y = ESS / num_post_samp, color = stat)) +
+    geom_line() +
+    labs(title = "ESS prop. for Re Sigmal aggregated over P, d",
+         x = "freq. index", y = "ESS proportion")
+
+# plot ESS for Complex values
+summ_Sigmal_ESS |> 
+    dplyr::filter(type == "Im") |> 
+    ggplot(aes(x = l, y = ESS / num_post_samp, color = stat)) +
+    geom_line() +
+    labs(title = "ESS prop. for Im Sigmal aggregated over P, d",
+         x = "freq. index", y = "ESS proportion")
+
+# calculate ESS proportion and per second summaries
+ess_prop_rows[["Sigmal"]] <- quantile(
+    Sigmal_ESS$ESS / num_post_samp, 
+    probs = c(0, .025, .25, .5, .75, .975, 1))
+ess_s_rows[["Sigmal"]] <- quantile(
+    Sigmal_ESS$ESS / sampling_time_sec,
+    probs = c(0, .025, .25, .5, .75, .975, 1))
+
 # smoothing parameter summaries -------------------------------------------
 
 if (Lambda_method == "bspline") {
@@ -313,8 +528,7 @@ if (Lambda_method == "bspline") {
     median(taujkl2_s[1, 1, 350, gibbsPostBurn])    
 }
 
-
-# evaluate sigmak2 -------------------------------------------------------
+# evaluate sigmak2 trace and CIs ------------------------------------------
 
 catout("true sigmak02 and posterior quantiles for some k")
 
@@ -337,6 +551,27 @@ plot(sigmak2_s[k, ], type = "l",
      ylab = "sigmak2")
 abline(h = sigmak02[k])
 save_plot_pdf(file.path(result_dir, paste0("post-sigmak2-k-", k, ".pdf")))
+
+# evaluate sigmak2 ESS ----------------------------------------------------
+
+sigmak2_ESS <- apply(sigmak2_s[, gibbsPostBurn], c(1), 
+                     posterior::ess_basic)
+
+# calculate ESS proportion and per second summaries
+ess_prop_rows[["sigmak2"]] <- quantile(sigmak2_ESS / num_post_samp, 
+         probs = c(0, .025, .25, .5, .75, .975, 1))
+ess_s_rows[["sigmak2"]] <- quantile(sigmak2_ESS / sampling_time_sec, 
+         probs = c(0, .025, .25, .5, .75, .975, 1))
+
+# create table of ESS stats -----------------------------------------------
+
+ess_prop_df <- do.call(rbind, ess_prop_rows)
+ess_s_df <- do.call(rbind, ess_s_rows)
+
+catout("ESS proportion summary for each parameter")
+print(ess_prop_df)
+catout("ESS/s summary for each parameter")
+print(ess_s_df)
 
 # evaluate full SDM estimates ---------------------------------------------
 
