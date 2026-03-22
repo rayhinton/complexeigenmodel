@@ -776,9 +776,9 @@ ksampler <- function(k) {
         
         ### save thinned samples
         # save different hyperparameters depending on Lambda method
+        s_thin <- ceiling(s / t_thin)
         if ((s-1) %% t_thin == 0) {    
             # save this iteration into sampler-level arrays
-            s_thin <- ceiling(s / t_thin)
             U_kls_all[, , , , s_thin] <- U_kls
             Lambdak_l_s[, , , s_thin] <- result_Lambdas
             sigmak2_s[, s_thin] <- result_sigmak2
