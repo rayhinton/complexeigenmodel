@@ -175,6 +175,11 @@ dir.create(file.path(result_dir, "post-Lambda-and-true"),
            recursive = TRUE)
 dir.create(file.path(result_dir, "SDM-est-coherence-and-phase"), 
            recursive = TRUE)
+dir.create(file.path(result_dir, "sigmak2-trace-plots"),
+            recursive = TRUE)
+dir.create(file.path(result_dir, "ESS_summaries"),
+           recursive = TRUE)
+
 
 # save the parameters file in the results directory, for later reference
 file.copy("testing/time-series-from-SDM/model-simulation-parameters.R", 

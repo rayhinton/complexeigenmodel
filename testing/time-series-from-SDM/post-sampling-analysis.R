@@ -86,7 +86,7 @@ for (j in 1:d) {
     lines(med_Lambda_ESS[j, ] / num_post_samp, col = "green")
     lines(min_Lambda_ESS[j, ] / num_post_samp, col = "red")
     
-    save_plot_pdf(file.path(result_dir,
+    save_plot_pdf(file.path(result_dir, "ESS_summaries",
                             paste0("Lambda-min-med-max-ESS-j-", j, ".pdf")))
 }
 
@@ -187,7 +187,7 @@ rbind(data.frame(ESS = apply(ESS_Ukl_dists, 2, min) / num_post_samp,
     theme(legend.position = c(0, 1), legend.justification = c(0, 1),
           legend.background = element_rect(fill = alpha("white", 0.6)))
 
-save_plot_pdf(file.path(result_dir, 
+save_plot_pdf(file.path(result_dir, "ESS_summaries",
                         paste0("Ukl-dist-summary-ESS-max-min.pdf")))
 
 # calculate ESS proportion and per second summaries
@@ -263,7 +263,7 @@ summ_ESS_Ukl_real |>
     geom_line() +
     labs(x = "freq. index", y = "ESS proportion", 
          title = "Ukl (real values) ESS prop. aggregated over P, d, K")
-save_plot_pdf(file.path(result_dir, 
+save_plot_pdf(file.path(result_dir, "ESS_summaries",
                         paste0("post-Ukl-element-ESS-by-freq.pdf")))
 
 catout("indices of Re(Ukl) with the worse ESS:")
@@ -278,7 +278,7 @@ plot(worst_ReUkl, type = "l",
      main = paste0("Trace plot of Re(Ukl) with (p, j, k, l) = (",
                    paste(ind_worst_ReUkl, collapse = ", " ), ")"),
      xlab = "freq. index", ylab = "ESS")
-save_plot_pdf(file.path(result_dir, 
+save_plot_pdf(file.path(result_dir, "ESS_summaries",
                         paste0("post-Ukl-element-worstESS-traceplot.pdf")))
 
 # calculate ESS proportion and per second summaries
@@ -309,8 +309,6 @@ for (k in 1:K) {
 # - one Complex for each off-diagonal entry
 Proj_ESS <- matrix(NA, K*num_freqs*(P + 2*choose(P, 2)), 5)
 Proj_Re_or_Im <- rep(NA, K*num_freqs*(P + 2*choose(P, 2)))
-
-plot(Re(Proj_kl_s[1, 1, 1, 1, ]), type = "l")
 
 # calculate ESS for real and complex, diagonal and upper-triangular entries
 rowi <- 1
@@ -361,6 +359,8 @@ summ_ESS |>
     geom_line() +
     labs(title = "min, median, max ESS prop. for Real proj. matrix entries",
          x = "freq. index", y = "ESS proportion")
+save_plot_pdf(file.path(result_dir, "ESS_summaries",
+                        "ESS_prop_Proj_mat_Real.pdf"))
 
 # plot ESS by frequency for Complex values
 summ_ESS |> 
@@ -369,6 +369,8 @@ summ_ESS |>
     geom_line() +
     labs(title = "min, median, max ESS prop. for Complex proj. matrix entries",
          x = "freq. index", y = "ESS proportion")
+save_plot_pdf(file.path(result_dir, "ESS_summaries",
+                        "ESS_prop_Proj_mat_Complex.pdf"))
 
 # calculate ESS proportion and per second summaries
 ess_prop_rows[["Proj"]] <- quantile(
@@ -488,6 +490,8 @@ summ_Sigmal_ESS |>
     geom_line() +
     labs(title = "ESS prop. for Re Sigmal aggregated over P, d",
          x = "freq. index", y = "ESS proportion")
+save_plot_pdf(file.path(result_dir, "ESS_summaries",
+                        "ESS_prop_Sigmal_Real.pdf"))
 
 # plot ESS for Complex values
 summ_Sigmal_ESS |> 
@@ -496,6 +500,8 @@ summ_Sigmal_ESS |>
     geom_line() +
     labs(title = "ESS prop. for Im Sigmal aggregated over P, d",
          x = "freq. index", y = "ESS proportion")
+save_plot_pdf(file.path(result_dir, "ESS_summaries",
+                        "ESS_prop_Sigmal_Complex.pdf"))
 
 # calculate ESS proportion and per second summaries
 ess_prop_rows[["Sigmal"]] <- quantile(
@@ -532,25 +538,34 @@ if (Lambda_method == "bspline") {
 
 catout("true sigmak02 and posterior quantiles for some k")
 
-k <- 1
-sigmak02[k]
-quantile(sigmak2_s[k, gibbsPostBurn], c(.025, .5, .975))
+# make trace plots for all sigmak2
+for (k in 1:K) {
+    plot(sigmak2_s[k, ], type = "l",
+        main = paste0("Trace plot, sigmak2, k = ", k),
+        ylab = "sigmak2",
+        ylim = c(
+            min(c(sigmak2_s[k, ]), sigmak02[k]),
+            max(c(sigmak2_s[k, ]), sigmak02[k])
+        ))
+    abline(h = sigmak02[k])
+    save_plot_pdf(file.path(result_dir, "sigmak2-trace-plots", 
+        paste0("post-sigmak2-k-", k, ".pdf")))
+}
 
-plot(sigmak2_s[k, ], type = "l",
-     main = paste0("Trace plot, sigmak2, k = ", k),
-     ylab = "sigmak2")
-abline(h = sigmak02[k])
-save_plot_pdf(file.path(result_dir, paste0("post-sigmak2-k-", k, ".pdf")))
+# create and show a data frame that evaluates if CIs contain the true sigmak02
+sigmak2_summ <- cbind(k = 1:K,
+      apply(sigmak2_s[, gibbsPostBurn], 1, quantile, probs = c(.025, .975)) |> 
+          t(),
+      rowMeans(sigmak2_s[, gibbsPostBurn]),
+      sigmak02
+      ) |> data.frame()
 
-k <- 2
-sigmak02[k]
-quantile(sigmak2_s[k, gibbsPostBurn], c(.025, .5, .975))
+colnames(sigmak2_summ) <- c("k", "CI.025", "CI.975", "post.mean", "true")
 
-plot(sigmak2_s[k, ], type = "l",
-     main = paste0("Trace plot, sigmak2, k = ", k),
-     ylab = "sigmak2")
-abline(h = sigmak02[k])
-save_plot_pdf(file.path(result_dir, paste0("post-sigmak2-k-", k, ".pdf")))
+sigmak2_summ$inCI <- sigmak2_summ$CI.025 <= sigmak02 & 
+    sigmak02 <= sigmak2_summ$CI.975
+
+print(sigmak2_summ)
 
 # evaluate sigmak2 ESS ----------------------------------------------------
 
