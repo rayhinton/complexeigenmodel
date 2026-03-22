@@ -92,11 +92,11 @@ for (j in 1:d) {
 
 
 # which.max(ds_to_true) |> arrayInd(.dim = dim(ds_to_true))
-which.min(min_Lambda_ESS) |> arrayInd(.dim = dim(min_Lambda_ESS))
-min(min_Lambda_ESS)
+catout("which Lambda indices (j, k, l) have the lowest ESS?")
+which.min(Lambda_ESS) |> arrayInd(.dim = dim(Lambda_ESS))
 
-plot(Lambdak_l_s[2, 1, 28, ], type = "l")
-plot(Lambdak_l_s[2, 2, 28, ], type = "l")
+# plot(Lambdak_l_s[2, 1, 28, ], type = "l")
+# plot(Lambdak_l_s[2, 2, 28, ], type = "l")
 
 # calculate ESS proportion and per second summaries
 ess_prop_rows[["Lambda"]] <- quantile(as.vector(Lambda_ESS) / num_post_samp,
@@ -474,6 +474,7 @@ for (l in 1:num_freqs) {
 Sigmal_ESS <- cbind(data.frame(Sigmal_ESS), Sigmal_Re_or_Im)
 names(Sigmal_ESS) <- c("ESS", "l", "p", "j", "type")
 
+catout("which Sigmal entries have the lowest ESS?")
 Sigmal_ESS |> dplyr::group_by(type) |> dplyr::slice_min(ESS, n = 1)
 
 # summarize min, max, median ESS in a long form for easier plotting
@@ -584,9 +585,9 @@ ess_prop_df <- do.call(rbind, ess_prop_rows)
 ess_s_df <- do.call(rbind, ess_s_rows)
 
 catout("ESS proportion summary for each parameter")
-ess_prop_df
+print(ess_prop_df, digits = 4)
 catout("ESS/s summary for each parameter")
-ess_s_df
+print(ess_s_df, digits = 4)
 
 # evaluate full SDM estimates ---------------------------------------------
 

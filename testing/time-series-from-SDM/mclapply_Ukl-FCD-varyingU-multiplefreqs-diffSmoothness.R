@@ -122,7 +122,7 @@ save_plot_pdf <- function(plot_path, width = 6, height = 4) {
     p <- recordPlot()
     pdf(plot_path, width = width, height = height)
     replayPlot(p)
-    dev.off()    
+    invisible(dev.off())    
 }
 
 log_and_print_obj <- function(x) {
