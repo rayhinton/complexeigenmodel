@@ -266,7 +266,7 @@ summ_ESS_Ukl_real |>
 save_plot_pdf(file.path(result_dir, "ESS_summaries",
                         paste0("post-Ukl-element-ESS-by-freq.pdf")))
 
-catout("indices of Re(Ukl) with the worse ESS:")
+catout("indices of Re(Ukl) with the worst ESS:")
 ind_worst_ReUkl <- which.min(ESS_Ukl_real) |> arrayInd(.dim = dim(ESS_Ukl_real))
 print(ind_worst_ReUkl)
 
@@ -278,7 +278,7 @@ plot(worst_ReUkl, type = "l",
      main = paste0("Trace plot of Re(Ukl) with (p, j, k, l) = (",
                    paste(ind_worst_ReUkl, collapse = ", " ), ")"),
      xlab = "freq. index", ylab = "ESS")
-save_plot_pdf(file.path(result_dir, "ESS_summaries",
+save_plot_pdf(file.path(result_dir,
                         paste0("post-Ukl-element-worstESS-traceplot.pdf")))
 
 # calculate ESS proportion and per second summaries
@@ -341,7 +341,7 @@ Proj_ESS <- data.frame(Proj_ESS)
 Proj_ESS$type <- Proj_Re_or_Im
 names(Proj_ESS) <- c("ESS", "k", "l", "p", "j", "type")
 
-# what are the indices of the entry with the worst ESS?
+catout("what are the indices of the Sigmal entry with the worst ESS?")
 Proj_ESS |> dplyr::group_by(type) |> dplyr::slice_min(ESS, n = 1)
 
 # save the aggregated min, med, max in long form for easier plotting
@@ -402,6 +402,7 @@ ess_s_rows[["Proj"]] <- quantile(
 
 # evaluate Sigmal ---------------------------------------------------------
 
+catout("quantiles of Sigmal tuning parameter")
 quantile(n_Sig, c(0, .025, .25, .5, .75, .975, 1))
 
 l <- ind_far_Ukl[2]
@@ -437,7 +438,7 @@ par(mfrow = c(1, 1), mar = c(5.1, 4.1, 4.1, 2.1))
 
 catout("how many and what fraction of Sigmal have 0 acceptance rate?")
 sum(rowMeans(accCount_Sigma_s[, gibbsPostBurn]) == 0)
-# what fraction have 0 acceptance rate?
+catout("what fraction have 0 acceptance rate?")
 sum(rowMeans(accCount_Sigma_s[, gibbsPostBurn]) == 0) / num_freqs
 # show the indices of which ones have 0 acceptance rate
 # which(rowMeans(accCount_Sigma_s[, gibbsPostBurn]) == 0)
@@ -536,8 +537,6 @@ if (Lambda_method == "bspline") {
 
 # evaluate sigmak2 trace and CIs ------------------------------------------
 
-catout("true sigmak02 and posterior quantiles for some k")
-
 # make trace plots for all sigmak2
 for (k in 1:K) {
     plot(sigmak2_s[k, ], type = "l",
@@ -565,7 +564,8 @@ colnames(sigmak2_summ) <- c("k", "CI.025", "CI.975", "post.mean", "true")
 sigmak2_summ$inCI <- sigmak2_summ$CI.025 <= sigmak02 & 
     sigmak02 <= sigmak2_summ$CI.975
 
-print(sigmak2_summ)
+catout("true sigmak02 and posterior quantiles for some k")
+sigmak2_summ
 
 # evaluate sigmak2 ESS ----------------------------------------------------
 
@@ -584,9 +584,9 @@ ess_prop_df <- do.call(rbind, ess_prop_rows)
 ess_s_df <- do.call(rbind, ess_s_rows)
 
 catout("ESS proportion summary for each parameter")
-print(ess_prop_df)
+ess_prop_df
 catout("ESS/s summary for each parameter")
-print(ess_s_df)
+ess_s_df
 
 # evaluate full SDM estimates ---------------------------------------------
 
@@ -667,6 +667,7 @@ catout("AMSE, scaled posterior vs. scaled multitaper")
 c(rowMeans((posterior_dists/P)^2 / sigmak02) |> mean(),
   rowMeans((multitaper_dists/P)^2 / sigmak02) |> mean())
 
+catout("quantiles of posterior and multitaper Frob. dist. to truth")
 for (k in 1:K) {
     cat(paste0("\nk = ", k, "\n"))
     quantile(as.vector(posterior_dists[k, ]), 
