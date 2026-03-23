@@ -4,10 +4,8 @@
 # dataseed <- 17102025
 dataseed <- 28112025
 
-# parseed <- 314
-# parseed <- 3141
+# set parseed to NULL to set by SLURM task array ID (or to a single default)
 parseed <- 3141
-# parseed <- 963456789
 
 P <- 4
 d <- 2
