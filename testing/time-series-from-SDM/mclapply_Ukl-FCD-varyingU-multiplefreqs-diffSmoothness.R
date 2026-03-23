@@ -158,6 +158,14 @@ if ((gibbsIts * burnin) %% t_thin != 0) {
 
 job_id <- Sys.getenv("SLURM_JOB_ID")
 
+# define the parameter seed
+if (is.null(dataseed)) {
+    task_id <- as.integer(Sys.getenv("SLURM_ARRAY_TASK_ID", unset = "1"))
+    dataseed <- task_id * 100
+}
+
+print(paste0("dataseed = ", dataseed, "; parseed = ", parseed))
+
 # Create timestamped results directory
 timestamp <- format(Sys.time(), "%Y%m%d-%H%M%S")
 

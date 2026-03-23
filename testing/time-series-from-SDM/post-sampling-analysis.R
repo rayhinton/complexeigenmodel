@@ -660,13 +660,29 @@ cbind(
 )
 
 # AMSE, unscaled and scaled matrices
+AMSE_post <- rowMeans((posterior_dists/P)^2) |> mean()
+AMSE_multi <- rowMeans((multitaper_dists/P)^2) |> mean()
+AMSE_post_scaled <- rowMeans((posterior_dists/P)^2 / sigmak02) |> mean()
+AMSE_multi_scaled <- rowMeans((multitaper_dists/P)^2 / sigmak02) |> mean()
+
 catout("AMSE, posterior and multitaper")
-c(rowMeans((posterior_dists/P)^2) |> mean(),
-  rowMeans((multitaper_dists/P)^2) |> mean())
+c(AMSE_post, AMSE_multi)
 
 catout("AMSE, scaled posterior vs. scaled multitaper")
-c(rowMeans((posterior_dists/P)^2 / sigmak02) |> mean(),
-  rowMeans((multitaper_dists/P)^2 / sigmak02) |> mean())
+c(AMSE_post_scaled, AMSE_multi_scaled)
+  
+AMSE_results <- data.frame(
+    job_id = job_id,
+    parseed = parseed,
+    dataseed = dataseed,
+    Ukl_scale_k = U_k_scale_k,
+    AMSE_post = AMSE_post,
+    AMSE_multi = AMSE_multi,
+    AMSE_post_scaled = AMSE_post_scaled,
+    AMSE_multi_scaled = AMSE_multi_scaled
+)
+
+write.csv(AMSE_results, file.path(result_dir, "AMSE_results.csv"))
 
 catout("quantiles of posterior and multitaper Frob. dist. to truth")
 for (k in 1:K) {
