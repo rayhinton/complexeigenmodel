@@ -208,6 +208,7 @@ fkTR <- array(NA, c(P, P, K, Tt))
 U_kl0 <- array(NA, c(P, d, K, Tt))
 Lambdakl0 <- array(NA, c(d, K, Tt))
 
+set.seed(parseed * 10)
 if (TS_par_gen_method == "truncVAR") {
     source("testing/time-series-from-SDM/sim-setup-generate-truncVAR-pars.R")
 } else if (TS_par_gen_method == "smoothly-similar-Ukl") { 
@@ -268,6 +269,15 @@ save_plot_pdf(file.path(result_dir, "Ukl0-avg-dist-to-avg.pdf"))
 plot(sd_d_Ukl0, type = "l", 
      main = "st. dev. of axis Frobenius distance of Ukl0 to avg. Ukl0")
 save_plot_pdf(file.path(result_dir, "Ukl0-SD-dist-to-avg.pdf"))
+
+acos( Mod(t(Conj(avg_Uk0[, 1])) %*% U_kl0[, 1, 1, l]) )
+
+acos( Mod(t(Conj(avg_Uk0[, 2])) %*% U_kl0[, 2, 1, l]) )
+
+acos( diag(Mod(t(Conj(avg_Uk0)) %*% U_kl0[, , 1, l])) )
+
+apply(U_kl0[, 1, , l], c(2), 
+      \(x) acos( Mod(t(Conj(avg_Uk0[, 1])) %*% x) ))
 
 # calculate Cholesky decompositions ---------------------------------------
 
