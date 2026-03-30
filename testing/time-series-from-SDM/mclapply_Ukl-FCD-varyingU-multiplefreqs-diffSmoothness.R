@@ -223,6 +223,8 @@ Sigmal0 <- array(NA, c(P, P, num_freqs))
 invSigmal0 <- array(NA, c(P, P, num_freqs))
 
 d_Ukl0_to_avg_Uk0 <- array(NA, c(K, num_freqs))
+angles_to_avg_Ukl0 <- array(NA, c(d, K, num_freqs))
+princ_angles_to_avg_Ukl0 <- array(NA, c(d, K, num_freqs))
 
 for (l in 1:num_freqs) {
     avg_Uk0 <- apply(U_kl0[, , , l], c(1, 2), mean)
@@ -231,6 +233,11 @@ for (l in 1:num_freqs) {
     
     for (k in 1:K) {
         d_Ukl0_to_avg_Uk0[k, l] <- evec_Frob_stat(avg_Uk0, U_kl0[, , k, l])
+        
+        angles_to_avg_Ukl0[, k, l] <-
+            acos(Mod( diag(t(Conj(U_kl0[, , k, t])) %*% avg_Uk0) ))
+        princ_angles_to_avg_Ukl0[, k, l] <-
+            acos(svd( t(Conj(U_kl0[, , k, t])) %*% avg_Uk0 )$d)
     }
     
     avg_Uk0_perp <- (qr(avg_Uk0, complete = TRUE) |>
@@ -240,6 +247,47 @@ for (l in 1:num_freqs) {
     Sigmal0[, , l] <- V_Sigma0 %*% diag(P*(P:1) / sum(P:1)) %*% t(Conj(V_Sigma0))
     invSigmal0[, , l] <- solve(Sigmal0[, , l])
 }
+
+# plot mean angles to average Ukl0 matrix and subspace --------------------
+
+# find mean angle at each frequency and convert to data frame for ggplot
+mean_angles_to_avg_Ukl0 <- 
+    as.data.frame(t(apply(angles_to_avg_Ukl0, c(1, 3), mean)))
+colnames(mean_angles_to_avg_Ukl0) <- paste0("j", 1:d)
+mean_angles_to_avg_Ukl0$freq_index <- 1:num_freqs
+mean_angles_to_avg_Ukl0 <- 
+    tidyr::pivot_longer(mean_angles_to_avg_Ukl0, 
+                        -freq_index, names_to = "j", values_to = "angle")
+
+# plot
+plotp <- ggplot(mean_angles_to_avg_Ukl0, aes(freq_index, angle, color = j)) + 
+    geom_line() +
+    labs(title = "mean of vector angles from Ukl0 to avg. Ukl0",
+         x = "freq. index",
+         y = "angle (radians)")
+# save PDF
+print(plotp)
+save_plot_pdf(file.path(result_dir, "Ukl0-vector-angles-to-avg_Ukl0.pdf"))    
+
+# find mean angle at each frequency and convert to data frame for ggplot
+mean_princ_angles_to_avg_Ukl0 <- 
+    as.data.frame(t(apply(princ_angles_to_avg_Ukl0, c(1, 3), mean)))
+colnames(mean_princ_angles_to_avg_Ukl0) <- paste0("j", 1:d)
+mean_princ_angles_to_avg_Ukl0$freq_index <- 1:num_freqs
+mean_princ_angles_to_avg_Ukl0 <- 
+    tidyr::pivot_longer(mean_princ_angles_to_avg_Ukl0, 
+                        -freq_index, names_to = "j", values_to = "angle")
+
+# plot
+plotp <- ggplot(mean_princ_angles_to_avg_Ukl0, 
+                aes(freq_index, angle, color = j)) + 
+    geom_line() +
+    labs(title = "mean of principal angles from Ukl0 to avg. Ukl0",
+         x = "freq. index",
+         y = "angle (radians)")
+# save PDF
+print(plotp)
+save_plot_pdf(file.path(result_dir, "Ukl0-principal-angles-to-avg_Ukl0.pdf")) 
 
 # check Lambdakl0 ---------------------------------------------------------
 
