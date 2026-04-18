@@ -145,8 +145,8 @@ rbind(data.frame(distance = apply(ds_to_true, 2, min), datalabel = "min"),
     theme(legend.position = c(0, 1), legend.justification = c(0, 1),
           legend.background = element_rect(fill = alpha("white", 0.6)))
 
-save_plot_pdf(file.path(result_dir, 
-                        paste0("Ukl-dist-to-true-max-median-min.pdf")))
+save_plot_pdf(file.path(result_dir, "Ukl-and-Proj-dist-to-true",
+                        paste0("post-Ukl-dist-to-true-max-median-min.pdf")))
 
 # calculate Ukl distances and plot ESS for all k and l --------------------
 
@@ -292,6 +292,7 @@ ess_s_rows[["Ukl_real"]] <-
 # evaluating ESS of projection matrices -----------------------------------
 
 Proj_kl_s <- array(NA, c(P, P, K, num_freqs, num_samp))
+ds_to_true_Proj <- array(NA, c(K, num_freqs))
 
 # calculate each sampled projection matrix
 for (k in 1:K) {
@@ -300,6 +301,15 @@ for (k in 1:K) {
             Proj_kl_s[, , k, l, s] <- 
                 U_kls_all[, , k, l, s] %*% t(Conj(U_kls_all[, , k, l, s]))
         }
+        
+        # also estimate posterior mean Projection matrix
+        avg_Proj_kl <- apply(Proj_kl_s[, , k, l, gibbsPostBurn], c(1, 2), mean)
+        avg_Proj_kl <- eigen(avg_Proj_kl)$vectors[, 1:d]
+        avg_Proj_kl <- avg_Proj_kl %*% t(Conj(avg_Proj_kl))
+        
+        # calculate distance from post. mean to true Projection matrix
+        true_Proj_kl0 <- U_kl0[, , k, l] %*% t(Conj(U_kl0[, , k, l]))
+        ds_to_true_Proj[k, l] <- norm(avg_Proj_kl - true_Proj_kl0, "F")
     }
 }
 
@@ -379,6 +389,36 @@ ess_prop_rows[["Proj"]] <- quantile(
 ess_s_rows[["Proj"]] <- quantile(
     Proj_ESS$ESS / sampling_time_sec, 
     probs = c(0, .025, .25, .5, .75, .975, 1))
+
+# plot distances of posterior mean Projection and true Proj. matrices -----
+
+# plot the max and min distances per frequency
+# create a temporary data frame first
+plotp <- rbind(data.frame(distance = apply(ds_to_true_Proj, 2, min), 
+                          datalabel = "min"),
+      data.frame(distance = apply(ds_to_true_Proj, 2, median), 
+                 datalabel = "median"),
+      data.frame(distance = apply(ds_to_true_Proj, 2, max), 
+                 datalabel = "max")) |> 
+    # ggplot
+    ggplot(aes(x = rep(1:num_freqs, times = 3), 
+               y = distance, color = datalabel)) +
+    geom_line() +
+    labs(x = "freq. index", y = "Frob. dist.", 
+         title = "max, median, and min dist. of post. mean Proj. to true Proj. matrix") +
+    theme(legend.position = c(0, 1), legend.justification = c(0, 1),
+          legend.background = element_rect(fill = alpha("white", 0.6)))
+
+print(plotp)
+save_plot_pdf(file.path(result_dir, "Ukl-and-Proj-dist-to-true",
+                        paste0("post-Proj-dist-to-true-max-median-min.pdf")))
+
+# show the mean distance, to compare to the multitaper estimator
+catout("mean axis Frob. dist from multitaper and posterior mean Ukl to Ukl0")
+print(c(mean(multi_Ukl_dist), mean(ds_to_true)))
+
+catout("mean Frob. dist from multitaper and posterior mean Proj. to true Proj. matrix")
+print(c(mean(multi_Proj_dist), mean(ds_to_true_Proj)))
 
 # Finding worst combinations of ESS for Projection matrices ---------------
 
@@ -513,6 +553,139 @@ ess_s_rows[["Sigmal"]] <- quantile(
     Sigmal_ESS$ESS / sampling_time_sec,
     probs = c(0, .025, .25, .5, .75, .975, 1))
 
+
+# Sigmal loadings summary -------------------------------------------------
+
+Sigmal_avg_V <- array(NA, c(P, d, num_freqs))
+Sigmal_avg_Proj <- array(NA, c(P, P, num_freqs))
+
+for (l in 1:num_freqs) {
+    if (l %% 100 == 0) print(l)
+    
+    Sigmal_Vs <- matrix(0 + 0i, P, d)
+    Sigmal_Projs <- matrix(0 + 0i, P, P)
+    
+    for (s in 1:length(gibbsPostBurn)) {
+        this_Sigmal_V <- 
+            eigen(Sigmal_s[, , l, gibbsPostBurn[s]])$vectors[, 1:d]
+        
+        Sigmal_Vs <- Sigmal_Vs + this_Sigmal_V
+        Sigmal_Projs <- Sigmal_Projs + this_Sigmal_V %*% t(Conj(this_Sigmal_V))
+    }
+    
+    avg_Vl <- Sigmal_Vs / length(gibbsPostBurn)
+    avg_Vl <- avg_Vl %*%
+        solve( EigenR::Eigen_sqrt( t(Conj(avg_Vl)) %*% avg_Vl ) )
+    Sigmal_avg_V[, , l] <- avg_Vl    
+    
+    avg_Projl <- Sigmal_Projs / length(gibbsPostBurn)
+    Sigmal_Projs_V <- eigen(avg_Projl)$vectors[, 1:d]
+    Sigmal_avg_Proj[, , l] <- Sigmal_Projs_V %*% t(Conj(Sigmal_Projs_V))
+}
+
+# real values of loadings of 1st PC of Sigmal
+Re(Sigmal_avg_V[, 1, ]) |> 
+    as.data.frame() |>
+    dplyr::mutate(row = dplyr::row_number()) |>
+    tidyr::pivot_longer(-row, names_to = "freq", values_to = "value") |> 
+    dplyr::mutate(freq = as.numeric(gsub("V", "", freq))) |> 
+    ggplot(aes(x = freq, y = row, fill = value)) +
+    geom_tile() +
+    scale_fill_distiller(palette = "RdYlBu") +
+    labs(title = "Real loadings of 1st PC for Sigmal",
+         y = "channel")
+
+# complex values of loadings of 1st PC of Sigmal
+Im(Sigmal_avg_V[, 1, ]) |> 
+    as.data.frame() |>
+    dplyr::mutate(row = dplyr::row_number()) |>
+    tidyr::pivot_longer(-row, names_to = "freq", values_to = "value") |> 
+    dplyr::mutate(freq = as.numeric(gsub("V", "", freq))) |> 
+    ggplot(aes(x = freq, y = row, fill = value)) +
+    geom_tile() +
+    scale_fill_distiller(palette = "RdYlBu") +
+    labs(title = "Im. loadings of 1st PC for Sigmal",
+         y = "channel")
+
+# real values of loadings of 2nd PC of Sigmal
+Re(Sigmal_avg_V[, 2, ]) |> 
+    as.data.frame() |>
+    dplyr::mutate(row = dplyr::row_number()) |>
+    tidyr::pivot_longer(-row, names_to = "freq", values_to = "value") |> 
+    dplyr::mutate(freq = as.numeric(gsub("V", "", freq))) |> 
+    ggplot(aes(x = freq, y = row, fill = value)) +
+    geom_tile() +
+    scale_fill_distiller(palette = "RdYlBu") +
+    labs(title = "Real loadings of 2nd PC for Sigmal",
+         y = "channel")
+
+# complex values of loadings of 2nd PC of Sigmal
+Im(Sigmal_avg_V[, 2, ]) |> 
+    as.data.frame() |>
+    dplyr::mutate(row = dplyr::row_number()) |>
+    tidyr::pivot_longer(-row, names_to = "freq", values_to = "value") |> 
+    dplyr::mutate(freq = as.numeric(gsub("V", "", freq))) |> 
+    ggplot(aes(x = freq, y = row, fill = value)) +
+    geom_tile() +
+    scale_fill_distiller(palette = "RdYlBu") +
+    labs(title = "Im. loadings of 2nd PC for Sigmal",
+         y = "channel")
+
+# sum of squared loadings
+
+sq_loadings <- apply(Sigmal_avg_Proj, 3, diag)
+
+plotp <- Re(sq_loadings) |> 
+    as.data.frame() |>
+    dplyr::mutate(row = dplyr::row_number()) |>
+    tidyr::pivot_longer(-row, names_to = "freq", values_to = "value") |> 
+    dplyr::mutate(freq = as.numeric(gsub("V", "", freq))) |> 
+    ggplot(aes(x = freq, y = row, fill = value)) +
+    geom_tile() +
+    scale_fill_distiller(palette = "RdYlBu") +
+    labs(title = "sum of squared loadings of Sigmal",
+         y = "channel")
+
+print(plotp)
+save_plot_pdf(file.path(result_dir, "Sigmal-Ukl-subspace-loadings",
+                        "Sigmal-sum-squared-loadings.pdf"))
+
+# Ukl loadings summary ----------------------------------------------------
+
+# just find the sum of squared loadings for one k
+
+Ukl_sq_loadings <- array(NA, c(P, K, num_freqs))
+
+for (k in 1:K) {
+    for (l in 1:num_freqs) {
+        avgUkl <- apply(U_kls_all[, , k, l, gibbsPostBurn], c(1, 2), mean)
+        avgUkl <- avgUkl %*%
+            solve( EigenR::Eigen_sqrt( t(Conj(avgUkl)) %*% avgUkl ) )
+        
+        avg_Projkl <- avgUkl %*% t(Conj(avgUkl))
+        
+        Ukl_sq_loadings[, k, l] <- Re(diag(avg_Projkl))
+    }
+}
+
+for (k in 1:K) {
+    plotp <- Ukl_sq_loadings[, k, ] |> 
+        as.data.frame() |>
+        dplyr::mutate(row = dplyr::row_number()) |>
+        tidyr::pivot_longer(-row, names_to = "freq", values_to = "value") |> 
+        dplyr::mutate(freq = as.numeric(gsub("V", "", freq))) |> 
+        ggplot(aes(x = freq, y = row, fill = value)) +
+        geom_tile() +
+        scale_fill_distiller(palette = "RdYlBu") +
+        labs(title = paste0("sum of squared loadings of Proj_kl, k = ", k),
+             y = "channel")
+    
+    print(plotp)
+    save_plot_pdf(
+        file.path(result_dir, "Sigmal-Ukl-subspace-loadings",
+                  paste0("Projkl-subspace-squared-loadings-k-", k, ".pdf")))
+}
+
 # smoothing parameter summaries -------------------------------------------
 
 if (Lambda_method == "bspline") {
@@ -529,11 +702,11 @@ if (Lambda_method == "bspline") {
     catout("median of taujkl2 samples at some diff j, k, and l")
     median(taujkl2_s[1, 1, 1, gibbsPostBurn])
     
-    median(taujkl2_s[1, 1, 150, gibbsPostBurn])
-    median(taujkl2_s[2, 1, 150, gibbsPostBurn])
+    median(taujkl2_s[1, 1, round(num_freqs/2), gibbsPostBurn])
+    median(taujkl2_s[2, 1, round(num_freqs/2), gibbsPostBurn])
     
-    median(taujkl2_s[1, 1, 256, gibbsPostBurn])
-    median(taujkl2_s[1, 1, 350, gibbsPostBurn])    
+    median(taujkl2_s[1, 1, round(num_freqs*.75), gibbsPostBurn])
+    median(taujkl2_s[1, 1, round(num_freqs*.9), gibbsPostBurn])    
 }
 
 # evaluate sigmak2 trace and CIs ------------------------------------------

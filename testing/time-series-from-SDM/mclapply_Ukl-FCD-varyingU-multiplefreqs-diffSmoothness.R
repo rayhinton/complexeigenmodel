@@ -187,7 +187,12 @@ dir.create(file.path(result_dir, "sigmak2-trace-plots"),
             recursive = TRUE)
 dir.create(file.path(result_dir, "ESS_summaries"),
            recursive = TRUE)
-
+dir.create(file.path(result_dir, "multitaper-parameter-estimates"),
+           recursive = TRUE)
+dir.create(file.path(result_dir, "Ukl-and-Proj-dist-to-true"),
+           recursive = TRUE)
+dir.create(file.path(result_dir, "Sigmal-Ukl-subspace-loadings"),
+           recursive = TRUE)
 
 # save the parameters file in the results directory, for later reference
 file.copy("testing/time-series-from-SDM/model-simulation-parameters.R", 
@@ -438,33 +443,127 @@ for (l in 1:num_freqs){
 
 # compare SDM ests and true SDMs ------------------------------------------
 
-plot(Re(SDMests[[1]][1,1, ]), type = "l", ylim = c(0, max(Re(SDMests[[1]]))), 
-     ylab = "spectral density", 
-     main = paste0("Diag. entries of multitaper est., k = ", 1))
-lines(Re(SDMests[[1]][2,2, ]), col = 2)
-lines(Re(SDMests[[1]][3,3, ]), col = 3)
-lines(Re(SDMests[[1]][4,4, ]), col = 4)
+for (k in 1:K) {
+    plot(Re(SDMests[[k]][1,1, ]), type = "l", 
+         # ylim = c(0, max(Re(SDMests[[k]]))), 
+         ylim = c(0, max(Re(SDMests[[k]]), Re(fkTR[, , k, ]))),
+         ylab = "spectral density", 
+         main = paste0("Diag. entries of multitaper est., k = ", k))
+    lines(Re(SDMests[[k]][2,2, ]), col = 2)
+    lines(Re(SDMests[[k]][3,3, ]), col = 3)
+    lines(Re(SDMests[[k]][4,4, ]), col = 4)
+    
+    lines(Re(fkTR[1, 1, k, 1:num_freqs]), col = 1, lty = 2)
+    lines(Re(fkTR[2, 2, k, 1:num_freqs]), col = 2, lty = 2)
+    lines(Re(fkTR[3, 3, k, 1:num_freqs]), col = 3, lty = 2)
+    lines(Re(fkTR[4, 4, k, 1:num_freqs]), col = 4, lty = 2)
+    
+    save_plot_pdf(file.path(result_dir, "multitaper-parameter-estimates",
+                            # "SDM-est-and-true-all-k.pdf"),
+                            paste0("SDM-est-and-true-k-", k, ".pdf")))
+}
 
-lines(Re(fkTR[1, 1, 1, 1:num_freqs]), col = 1, lty = 2)
-lines(Re(fkTR[2, 2, 1, 1:num_freqs]), col = 2, lty = 2)
-lines(Re(fkTR[3, 3, 1, 1:num_freqs]), col = 3, lty = 2)
-lines(Re(fkTR[4, 4, 1, 1:num_freqs]), col = 4, lty = 2)
+# estimate Lambda from the multitaper estimates ---------------------------
 
-save_plot_pdf(file.path(result_dir, "SDM-est-and-true-1.pdf"))
+# for a sample k in 1:K, and entry j in 1:d
+# find the eigenvalues at each frequency
+for (k in 1:K) {
+    Lambda_multi <- array(NA, c(d, num_freqs))
+    
+    # assign the first frequency just based on ordering
+    Lambda_multi[, 1] <- 
+        eigen(SDMests[[k]][, , 1], only.values = TRUE)$values[1:d] / 
+        sigmak02[k] - 1
+    L_evectors_l1 <- eigen(SDMests[[k]][, , 1])$vectors[1:d]
+    
+    for (l in 2:num_freqs) {
+        # TODO re-order these eigenvalues based on L_evectors compared to 
+        # L_evectors_l1
+        # multi_Lambda_l <- 
+        #     eigen(SDMests[[k]][, , l], only.values = TRUE)$values[1:d] / 
+        #     sigmak02[k] - 1
+        # 
+        # L_evectors <- eigen(SDMests[[k]][, , 1])$vectors[1:d]
+        
+        # TODO assign based on a re-ordering of multi_Lambda_l
+        Lambda_multi[, l] <- 
+            eigen(SDMests[[k]][, , l], only.values = TRUE)$values[1:d] / 
+            sigmak02[k] - 1
+    }
+    
+    ylim_L <- range(Lambda_multi, Lambdakl0[, k, ])
+    
+    plot(Lambda_multi[1, ], type = "l", ylim = ylim_L,
+         ylab = "Lambda",
+         main = paste0("Lambda estimate from multitaper estimate, k = ", k))
+    lines(Lambda_multi[2, ], col = "red")
+    
+    lines(Lambdakl0[1, k, 1:num_freqs], lty = 2)
+    lines(Lambdakl0[2, k, 1:num_freqs], lty = 2, col = "red")
+    
+    save_plot_pdf(file.path(result_dir, "multitaper-parameter-estimates",
+                            paste0("Lambda-est-multi-k-", k, ".pdf")))
+}
 
-plot(Re(SDMests[[2]][1,1, ]), type = "l", ylim = c(0, max(Re(SDMests[[2]]))),
-     ylab = "spectral density", 
-     main = paste0("Diag. entries of multitaper est., k = ", 2))
-lines(Re(SDMests[[2]][2,2, ]), col = 2)
-lines(Re(SDMests[[2]][3,3, ]), col = 3)
-lines(Re(SDMests[[2]][4,4, ]), col = 4)
+# estimate Ukl from multitaper --------------------------------------------
 
-lines(Re(fkTR[1, 1, 2, 1:num_freqs]), col = 1, lty = 2)
-lines(Re(fkTR[2, 2, 2, 1:num_freqs]), col = 2, lty = 2)
-lines(Re(fkTR[3, 3, 2, 1:num_freqs]), col = 3, lty = 2)
-lines(Re(fkTR[4, 4, 2, 1:num_freqs]), col = 4, lty = 2)
+multi_Ukl_dist <- array(NA, c(K, num_freqs))
+multi_Proj_dist <- array(NA, c(K, num_freqs))
+for (k in 1:K) {
+    for (l in 1:num_freqs) {
+        Ukl_multi_l <- eigen(SDMests[[k]][, , l])$vectors[, 1:d]
 
-save_plot_pdf(file.path(result_dir, "SDM-est-and-true-2.pdf"))
+        Proj_multi_kl <- Ukl_multi_l %*% t(Conj(Ukl_multi_l))
+        Proj_kl0 <- U_kl0[, , k, l] %*% t(Conj(U_kl0[, , k, l]))
+        
+        multi_Ukl_dist[k, l] <- 
+            fast_evec_Frob_stat(Ukl_multi_l, U_kl0[, , k, l])
+        multi_Proj_dist[k, l] <-
+            frob_dist(Proj_multi_kl, Proj_kl0)
+    }
+}
+
+# plot the max and min distances per frequency
+# create a temporary data frame first
+plotp <- rbind(data.frame(distance = apply(multi_Ukl_dist, 2, min), 
+                 datalabel = "min"),
+      data.frame(distance = apply(multi_Ukl_dist, 2, median), 
+                 datalabel = "median"),
+      data.frame(distance = apply(multi_Ukl_dist, 2, max), 
+                 datalabel = "max")) |> 
+    # ggplot
+    ggplot(aes(x = rep(1:num_freqs, times = 3), 
+               y = distance, color = datalabel)) +
+    geom_line() +
+    labs(x = "freq. index", y = "axis Frob. dist.", 
+         title = "max, median, and min dist. of multitaper Ukl to true Ukl0") +
+    theme(legend.position = c(0, 1), legend.justification = c(0, 1),
+          legend.background = element_rect(fill = alpha("white", 0.6)))
+
+print(plotp)
+save_plot_pdf(file.path(result_dir, "Ukl-and-Proj-dist-to-true",
+                        "multi-Ukl-to-true-Ukl0-dist.pdf"))
+
+# plot the max and min distances per frequency
+# create a temporary data frame first
+plotp <- rbind(data.frame(distance = apply(multi_Proj_dist, 2, min), 
+                 datalabel = "min"),
+      data.frame(distance = apply(multi_Proj_dist, 2, median), 
+                 datalabel = "median"),
+      data.frame(distance = apply(multi_Proj_dist, 2, max), 
+                 datalabel = "max")) |> 
+    # ggplot
+    ggplot(aes(x = rep(1:num_freqs, times = 3), 
+               y = distance, color = datalabel)) +
+    geom_line() +
+    labs(x = "freq. index", y = "Frob. dist.", 
+         title = "max, median, and min dist. of multitaper Proj. to true Proj. matrix") +
+    theme(legend.position = c(0, 1), legend.justification = c(0, 1),
+          legend.background = element_rect(fill = alpha("white", 0.6)))
+
+print(plotp)
+save_plot_pdf(file.path(result_dir, "Ukl-and-Proj-dist-to-true",
+                        "multi-Proj-to-true-Proj-matrix-dist.pdf"))
 
 # initialize arrays -------------------------------------------------------
 
