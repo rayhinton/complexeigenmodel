@@ -7,8 +7,11 @@ P <- 4
 d <- 2
 K <- 2
 Tt <- 1024 # length of time series
+# number of tapers to use for the input data
 LL <- round(sqrt(Tt))
 # LL <- round(P+1)
+# number of tapers to use for comparison as an estimator
+LL_comp <- round(sqrt(Tt))
 
 useMclapply <- FALSE
 n_cores <- 2

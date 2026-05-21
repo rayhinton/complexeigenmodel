@@ -775,7 +775,7 @@ post_sq_cohe_phase <- data.frame()
 for (k in 1:K) {
     cat(paste0(k, " of ", K, ": post. SDM, sq. coherence, and phase\n"))
     
-    # calculate individual and posterior mean SDMs
+    # calculate individual (i.e. Gibbs-sampled) and posterior mean SDMs
     for (l in 1:num_freqs) {
         meanSDM <- matrix(0 + 0i, P, P)
         for (s in gibbsPostBurn) {
@@ -794,6 +794,7 @@ for (k in 1:K) {
         
         # compare distances
         posterior_dists[k, l] <- frob_dist(meanSDM, fkTR[, , k, l])
+        # TODO replace with new multitaper
         multitaper_dists[k, l] <- frob_dist(data_list_w[[l]][[k]] / LL, 
                                             fkTR[, , k, l])
         
@@ -885,6 +886,7 @@ post_ests_df <- data.frame()
 for (k in 1:K) {
     for (j in 1:P) {
         SDMests_df <- rbind(SDMests_df, data.frame(
+            # TODO replace with new multitaper
             power = Re(SDMests[[k]][j, j, 1:num_freqs]), 
             k = k, j = j, l = 1:num_freqs, datalabel = "multitaper"))
         
@@ -926,6 +928,7 @@ for (kk in 1:K) {
 multi_SDMs <- array(NA, c(P, P, K, num_freqs))
 for (k in 1:K) {
     for (l in 1:num_freqs) {
+        # TODO replace with new multitaper
         multi_SDMs[, , k, l] <- data_list_w[[l]][[k]] / LL
     }
 }

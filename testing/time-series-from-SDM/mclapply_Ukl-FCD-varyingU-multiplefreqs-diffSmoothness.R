@@ -423,7 +423,6 @@ for (k in 1:K) {
 
 # Data (scaled SDM estimates) ---------------------------------------------
 
-# calculate true SDMs as data
 data_list_w <- list()
 
 for (l in 1:num_freqs){
@@ -431,9 +430,10 @@ for (l in 1:num_freqs){
     
     for (k in 1:K) {
         if (use_true_SDMs) {
-            # use the true SDM
+            # use the true SDM as data
             data_list[[k]] <- LL * fkTR[, , k, l]
         } else {
+            # use the multitaper estimates as data
             data_list[[k]] <- LL * SDMests[[k]][, , l]
         }
     }
@@ -523,7 +523,7 @@ for (k in 1:K) {
     }
 }
 
-# plot the max and min distances per frequency
+# plot the max and min distances per frequency - Ukl matrices
 # create a temporary data frame first
 plotp <- rbind(data.frame(distance = apply(multi_Ukl_dist, 2, min), 
                  datalabel = "min"),
@@ -544,7 +544,7 @@ print(plotp)
 save_plot_pdf(file.path(result_dir, "Ukl-and-Proj-dist-to-true",
                         "multi-Ukl-to-true-Ukl0-dist.pdf"))
 
-# plot the max and min distances per frequency
+# plot the max and min distances per frequency - Projection matrices
 # create a temporary data frame first
 plotp <- rbind(data.frame(distance = apply(multi_Proj_dist, 2, min), 
                  datalabel = "min"),
