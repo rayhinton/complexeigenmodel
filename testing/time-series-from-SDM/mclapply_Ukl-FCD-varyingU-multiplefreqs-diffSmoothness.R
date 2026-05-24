@@ -421,6 +421,30 @@ for (k in 1:K) {
     SDMests[[k]] <- F_tp1 * Tt
 }
 
+# estimate SDMs for multitaper as a comparison method ---------------------
+
+SDMests_comp <- list()
+
+Utp <- waveslim::sine.taper(Tt, LL_comp)
+
+for (k in 1:K) {
+    thisYts <- ts(t(Yts[, k, ]), start = c(1, 1), freq = 1)
+    
+    # estimate SDMs with multitaper
+    Y_tp <- apply(Utp, MARGIN = 2, function(u) u*thisYts, simplify = FALSE)
+    F_tp_list <- lapply(Y_tp, FUN = function(Y) astsa::mvspec(Y,plot = FALSE))
+    F_tp1 <- array(0, c(P, P, len_freq))
+    
+    for (ell in 1:len_freq) {
+        for(j in 1:length(F_tp_list)){
+            F_tp1[,,ell] <- F_tp1[,,ell] + F_tp_list[[j]]$fxx[,,ell]
+        }
+        F_tp1[,,ell] <- F_tp1[,,ell]/length(F_tp_list)
+    }
+    
+    SDMests_comp[[k]] <- F_tp1 * Tt
+}
+
 # Data (scaled SDM estimates) ---------------------------------------------
 
 data_list_w <- list()
@@ -444,23 +468,33 @@ for (l in 1:num_freqs){
 # compare SDM ests and true SDMs ------------------------------------------
 
 for (k in 1:K) {
-    plot(Re(SDMests[[k]][1,1, ]), type = "l", 
+    plot(Re(SDMests[[k]][1,1, ]), type = "l", col = 2,
          # ylim = c(0, max(Re(SDMests[[k]]))), 
          ylim = c(0, max(Re(SDMests[[k]]), Re(fkTR[, , k, ]))),
          ylab = "spectral density", 
-         main = paste0("Diag. entries of multitaper est., k = ", k))
-    lines(Re(SDMests[[k]][2,2, ]), col = 2)
-    lines(Re(SDMests[[k]][3,3, ]), col = 3)
-    lines(Re(SDMests[[k]][4,4, ]), col = 4)
+         main = paste0("Diag. entries of multitaper est. and true SDM, k = ", k))
+    lines(Re(SDMests[[k]][2,2, ]), col = 3)
+    lines(Re(SDMests[[k]][3,3, ]), col = 4)
+    lines(Re(SDMests[[k]][4,4, ]), col = 5)
     
-    lines(Re(fkTR[1, 1, k, 1:num_freqs]), col = 1, lty = 2)
-    lines(Re(fkTR[2, 2, k, 1:num_freqs]), col = 2, lty = 2)
-    lines(Re(fkTR[3, 3, k, 1:num_freqs]), col = 3, lty = 2)
-    lines(Re(fkTR[4, 4, k, 1:num_freqs]), col = 4, lty = 2)
+    lines(Re(fkTR[1, 1, k, 1:num_freqs]), col = 2, lty = 2)
+    lines(Re(fkTR[2, 2, k, 1:num_freqs]), col = 3, lty = 2)
+    lines(Re(fkTR[3, 3, k, 1:num_freqs]), col = 4, lty = 2)
+    lines(Re(fkTR[4, 4, k, 1:num_freqs]), col = 5, lty = 2)
+    
+    lines(Re(SDMests_comp[[k]][2,2, ]), col = 2, lty = 3)
+    lines(Re(SDMests_comp[[k]][2,2, ]), col = 3, lty = 3)
+    lines(Re(SDMests_comp[[k]][3,3, ]), col = 4, lty = 3)
+    lines(Re(SDMests_comp[[k]][4,4, ]), col = 5, lty = 3)
+    
+    legend(x = "topleft", legend = c("input", "comp.", "true"), 
+           lty = c(1, 3, 2),
+           y.intersp = 0.2,
+           bty = "n", inset = c(0, -0.18))
     
     save_plot_pdf(file.path(result_dir, "multitaper-parameter-estimates",
                             # "SDM-est-and-true-all-k.pdf"),
-                            paste0("SDM-est-and-true-k-", k, ".pdf")))
+                            paste0("SDM-input-and-comp-est-and-true-k-", k, ".pdf")))
 }
 
 # estimate Lambda from the multitaper estimates ---------------------------
@@ -495,23 +529,26 @@ for (k in 1:K) {
     
     plot(Lambda_multi[1, ], type = "l", ylim = ylim_L,
          ylab = "Lambda",
-         main = paste0("Lambda estimate from multitaper estimate, k = ", k))
+         main = paste0("Lambda estimate from input multitaper estimate, k = ", k))
     lines(Lambda_multi[2, ], col = "red")
     
     lines(Lambdakl0[1, k, 1:num_freqs], lty = 2)
     lines(Lambdakl0[2, k, 1:num_freqs], lty = 2, col = "red")
     
     save_plot_pdf(file.path(result_dir, "multitaper-parameter-estimates",
-                            paste0("Lambda-est-multi-k-", k, ".pdf")))
+                            paste0("Lambda-est-input-multi-k-", k, ".pdf")))
 }
 
 # estimate Ukl from multitaper --------------------------------------------
+
+# using the comparison multitaper estimates
 
 multi_Ukl_dist <- array(NA, c(K, num_freqs))
 multi_Proj_dist <- array(NA, c(K, num_freqs))
 for (k in 1:K) {
     for (l in 1:num_freqs) {
-        Ukl_multi_l <- eigen(SDMests[[k]][, , l])$vectors[, 1:d]
+        # use the comparison multitaper estimates
+        Ukl_multi_l <- eigen(SDMests_comp[[k]][, , l])$vectors[, 1:d]
 
         Proj_multi_kl <- Ukl_multi_l %*% t(Conj(Ukl_multi_l))
         Proj_kl0 <- U_kl0[, , k, l] %*% t(Conj(U_kl0[, , k, l]))
@@ -536,13 +573,13 @@ plotp <- rbind(data.frame(distance = apply(multi_Ukl_dist, 2, min),
                y = distance, color = datalabel)) +
     geom_line() +
     labs(x = "freq. index", y = "axis Frob. dist.", 
-         title = "max, median, and min dist. of multitaper Ukl to true Ukl0") +
+         title = "distances of (comparison) multitaper Ukl to true Ukl0") +
     theme(legend.position = c(0, 1), legend.justification = c(0, 1),
           legend.background = element_rect(fill = alpha("white", 0.6)))
 
 print(plotp)
 save_plot_pdf(file.path(result_dir, "Ukl-and-Proj-dist-to-true",
-                        "multi-Ukl-to-true-Ukl0-dist.pdf"))
+                        "multi-comp-Ukl-to-true-Ukl0-dist.pdf"))
 
 # plot the max and min distances per frequency - Projection matrices
 # create a temporary data frame first
@@ -557,13 +594,13 @@ plotp <- rbind(data.frame(distance = apply(multi_Proj_dist, 2, min),
                y = distance, color = datalabel)) +
     geom_line() +
     labs(x = "freq. index", y = "Frob. dist.", 
-         title = "max, median, and min dist. of multitaper Proj. to true Proj. matrix") +
+         title = "distances of (comparison) multitaper Proj. to true Proj. matrix") +
     theme(legend.position = c(0, 1), legend.justification = c(0, 1),
           legend.background = element_rect(fill = alpha("white", 0.6)))
 
 print(plotp)
 save_plot_pdf(file.path(result_dir, "Ukl-and-Proj-dist-to-true",
-                        "multi-Proj-to-true-Proj-matrix-dist.pdf"))
+                        "multi-comp-Proj-to-true-Proj-matrix-dist.pdf"))
 
 # initialize arrays -------------------------------------------------------
 

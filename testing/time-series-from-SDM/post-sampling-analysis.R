@@ -414,10 +414,10 @@ save_plot_pdf(file.path(result_dir, "Ukl-and-Proj-dist-to-true",
                         paste0("post-Proj-dist-to-true-max-median-min.pdf")))
 
 # show the mean distance, to compare to the multitaper estimator
-catout("mean axis Frob. dist from multitaper and posterior mean Ukl to Ukl0")
+catout("mean axis Frob. dist from comparison multitaper and posterior mean Ukl to Ukl0")
 print(c(mean(multi_Ukl_dist), mean(ds_to_true)))
 
-catout("mean Frob. dist from multitaper and posterior mean Proj. to true Proj. matrix")
+catout("mean Frob. dist from comparison multitaper and posterior mean Proj. to true Proj. matrix")
 print(c(mean(multi_Proj_dist), mean(ds_to_true_Proj)))
 
 # Finding worst combinations of ESS for Projection matrices ---------------
@@ -764,6 +764,8 @@ print(ess_s_df, digits = 4)
 
 # evaluate full SDM estimates ---------------------------------------------
 
+# using the comparison multitaper estimates
+
 # sigmakl2 * (Ukl %*% Lambdakl %*% t(Conj(Ukl)) + I_P)
 posterior_dists <- array(NA, c(K, num_freqs))
 multitaper_dists <- array(NA, c(K, num_freqs))
@@ -794,8 +796,9 @@ for (k in 1:K) {
         
         # compare distances
         posterior_dists[k, l] <- frob_dist(meanSDM, fkTR[, , k, l])
-        # TODO replace with new multitaper
-        multitaper_dists[k, l] <- frob_dist(data_list_w[[l]][[k]] / LL, 
+        # multitaper_dists[k, l] <- frob_dist(data_list_w[[l]][[k]] / LL, 
+        # use the comparison multitaper
+        multitaper_dists[k, l] <- frob_dist(SDMests_comp[[k]][, , l], 
                                             fkTR[, , k, l])
         
         # calculate posterior mean squared coherence and phase
@@ -825,7 +828,7 @@ for (k in 1:K) {
 catout("true sigmak02")
 sigmak02
 
-catout("individual MSE for estimated SDMs")
+catout("individual MSE for estimated SDMs (multitaper is comparison)")
 cbind(
     posterior = rowMeans((posterior_dists/P)^2),
     multitaper = rowMeans((multitaper_dists/P)^2),
@@ -839,10 +842,10 @@ AMSE_multi <- rowMeans((multitaper_dists/P)^2) |> mean()
 AMSE_post_scaled <- rowMeans((posterior_dists/P)^2 / sigmak02) |> mean()
 AMSE_multi_scaled <- rowMeans((multitaper_dists/P)^2 / sigmak02) |> mean()
 
-catout("AMSE, posterior and multitaper")
+catout("AMSE, posterior and comparison multitaper")
 c(AMSE_post, AMSE_multi)
 
-catout("AMSE, scaled posterior vs. scaled multitaper")
+catout("AMSE, scaled posterior vs. scaled comparison multitaper")
 c(AMSE_post_scaled, AMSE_multi_scaled)
   
 AMSE_results <- data.frame(
@@ -858,7 +861,7 @@ AMSE_results <- data.frame(
 
 write.csv(AMSE_results, file.path(result_dir, "AMSE_results.csv"))
 
-catout("quantiles of posterior and multitaper Frob. dist. to truth")
+catout("quantiles of posterior and comparison multitaper Frob. dist. to truth")
 for (k in 1:K) {
     cat(paste0("\nk = ", k, "\n"))
     quantile(as.vector(posterior_dists[k, ]), 
@@ -870,7 +873,7 @@ for (k in 1:K) {
          main = paste0("densities of SDM estimate distances, k = ", k),
          xlab = "Frob. distance", ylab = "density")
     lines(density(as.vector(multitaper_dists[k, ]), from = 0), col = 2)
-    legend(x = "topright", legend = c("posterior", "multitaper"),
+    legend(x = "topright", legend = c("posterior", "comp. multitaper"),
            col = c(1, 2), lwd = 2)
     
     save_plot_pdf(file.path(result_dir, "post-SDM-est-dist-density",
@@ -879,6 +882,8 @@ for (k in 1:K) {
 
 # compare true, multitaper, and posterior mean SDMs -----------------------
 
+# using the comparison multitaper estimates
+
 SDMests_df <- data.frame()
 trueSDM_df <- data.frame()
 post_ests_df <- data.frame()
@@ -886,9 +891,10 @@ post_ests_df <- data.frame()
 for (k in 1:K) {
     for (j in 1:P) {
         SDMests_df <- rbind(SDMests_df, data.frame(
-            # TODO replace with new multitaper
-            power = Re(SDMests[[k]][j, j, 1:num_freqs]), 
-            k = k, j = j, l = 1:num_freqs, datalabel = "multitaper"))
+            # power = Re(SDMests[[k]][j, j, 1:num_freqs]), 
+            # use the comparison multitaper
+            power = Re(SDMests_comp[[k]][j, j, 1:num_freqs]), 
+            k = k, j = j, l = 1:num_freqs, datalabel = "comp. multi."))
         
         trueSDM_df <- rbind(trueSDM_df, data.frame(
             power = Re(fkTR[j, j, k, 1:num_freqs]), 
@@ -907,7 +913,7 @@ post_ests_df <- dplyr::mutate(post_ests_df,
 
 all_df <- rbind(SDMests_df, trueSDM_df, post_ests_df)
 all_df$datalabel <- factor(all_df$datalabel, 
-                           levels = c("multitaper", "post. mean", "true"))
+                           levels = c("comp. multi.", "post. mean", "true"))
 
 for (kk in 1:K) {
     plotp <- dplyr::filter(all_df, k == kk) |> 
@@ -922,14 +928,17 @@ for (kk in 1:K) {
 
 # squared coherence and phase ---------------------------------------------
 
+# using the comparison multitaper estimates
+
 # fkTR[, , k, l] is a true SDM
 # post_mean_SDMs[, , k, l] is a posterior mean SDM
 
 multi_SDMs <- array(NA, c(P, P, K, num_freqs))
 for (k in 1:K) {
     for (l in 1:num_freqs) {
-        # TODO replace with new multitaper
-        multi_SDMs[, , k, l] <- data_list_w[[l]][[k]] / LL
+        # multi_SDMs[, , k, l] <- data_list_w[[l]][[k]] / LL
+        # use the comparison multitaper
+        multi_SDMs[, , k, l] <- SDMests_comp[[k]][, , l]
     }
 }
 
@@ -960,7 +969,7 @@ for (k in 1:K) {
                                       multi_sq_cohe[1:num_freqs]),
                           phase = c(true_phase, multi_phase),
                           freq_index = 1:num_freqs,
-                          datalabel = rep(c("true", "multitaper"), 
+                          datalabel = rep(c("true", "comp. multi."), 
                                           each = num_freqs))
                 )
         }
@@ -981,7 +990,7 @@ for (k in 1:K) {
                             labeller = \(x) label_both(x, multi_line = FALSE)) +
         geom_line(aes(linetype = datalabel, color = datalabel), 
                   linewidth = .2) +
-        scale_color_manual(values = c("true" = "red", "multitaper" = "black", 
+        scale_color_manual(values = c("true" = "red", "comp. multi." = "black", 
                                       "posterior" = "black")) +
         labs(title = paste0("Estimated squared coherence for k = ", k)) +
         theme(legend.position = c(0, 1), legend.justification = c(0, 1),
@@ -1002,7 +1011,7 @@ for (k in 1:K) {
                             labeller = \(x) label_both(x, multi_line = FALSE)) +
         geom_line(aes(linetype = datalabel, color = datalabel), 
                   linewidth = .2) +
-        scale_color_manual(values = c("true" = "red", "multitaper" = "black", 
+        scale_color_manual(values = c("true" = "red", "comp. multi." = "black", 
                                       "posterior" = "black")) +
         labs(title = paste0("Estimated phase for k = ", k)) +
         theme(legend.position = c(0, 1), legend.justification = c(0, 1),
