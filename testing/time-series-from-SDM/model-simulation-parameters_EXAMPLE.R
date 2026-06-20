@@ -21,6 +21,15 @@ use_Id_Sigmal_init <- FALSE
 sample_true_Ukl0 <- FALSE
 all_same_VAR_pars <- FALSE
 
+# initialize parameters to true values or something else
+init_sigmak2_truth <- FALSE
+init_Ukl_truth <- FALSE
+# when using Lambda_method = RW, they are already initialized to the truth
+# init_Lambda_truth <- TRUE
+# there is no "truth" Sigmal for some data-generation methods
+# try changing use_Id_Sigmal_init instead
+# init_Sigmal_truth <- TRUE
+
 # options include: bspline, RW
 Lambda_method <- "bspline"
 

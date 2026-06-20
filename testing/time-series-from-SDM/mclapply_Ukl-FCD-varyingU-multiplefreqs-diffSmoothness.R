@@ -623,7 +623,14 @@ for (k in 1:K) {
     }
 }
 # temporary arrays
+if (init_Ukl_truth) {
+    U_kls_all[, , , , 1] <- U_kl0[, , , 1:num_freqs]
+}
 U_kls <- U_kls_all[, , , , 1]
+
+if (init_sigmak2_truth) {
+    sigmak2_s[, 1] <- sigmak02
+}
 result_sigmak2 <- sigmak2_s[, 1]
 
 if (Lambda_method == "bspline") {
